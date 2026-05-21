@@ -256,6 +256,35 @@ ActIdle             = _action("待机",            _idle)
 ActEnforceScreenDown = _action("强制纱窗放下",   _enforce_screen_down)
 ActLimitNightOpen   = _action("夜间限制开度",    _limit_night_open)
 
+def _lower_screen_for_sun(tm, cap, trace):
+    """西晒遮光：降下纱窗"""
+    if tm.screen_position_pct >= 95:
+        return "success"
+    tm.screen_target_pct = 100
+    tm.screen_motion = "rolling_down"
+    tm.bt_active_branch = "P6.SunScreen"
+    if trace:
+        trace.record(tm, "P6.SunScreen", "lower_screen_for_sun", "running")
+    return "running"
+
+def _close_for_no_human(tm, cap, trace):
+    """无人节能：关窗"""
+    tm.window_target_pct = 0
+    tm.actuator_target_mm = 0
+    if tm.actuator_stroke_mm > 1:
+        tm.actuator_state = "retracting"
+        tm.bt_active_branch = "P5.NoHumanClose"
+        if trace:
+            trace.record(tm, "P5.NoHumanClose", "close_for_energy_save", "running")
+        return "running"
+    tm.window_state = "closed"
+    tm.window_open_pct = 0
+    tm.bt_active_branch = "P5.NoHumanClose"
+    return "success"
+
+ActLowerScreenSun = _action("西晒降纱窗", _lower_screen_for_sun)
+ActCloseNoHuman = _action("无人关窗节能", _close_for_no_human)
+
 ActLogObstacle = _action("记录:遇阻",     _log_safety("Obstacle"))
 ActLogOverheat = _action("记录:过热",     _log_safety("Overheat"))
 ActLogRain     = _action("记录:雨天关窗", _log_safety("RainClose"))

@@ -12,6 +12,11 @@ device:
   screen_speed_pct_per_s: 20
   power_type: adapter  # adapter / battery_solar
 
+install:
+  # 安装信息（每台设备独立配置）
+  orientation: S          # 窗朝向：N/S/E/W/NE/NW/SE/SW
+  room_type: bedroom      # 安装房间：bedroom/child_room/elderly_room/study/living_room
+
 linkage:
   # 窗纱联动规则
   open_window_requires_screen_down: true

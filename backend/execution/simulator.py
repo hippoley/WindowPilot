@@ -9,11 +9,13 @@ from domain.capability import DeviceCapability
 # ═══ 推窗器仿真 ═══
 
 ACTUATOR_MM_PER_TICK = 25.0  # 500ms tick, 约 50mm/s
+ACTUATOR_MM_PER_TICK_ELDERLY = 12.0  # 适老房间慢速
 
 def simulate_actuator(tm: ThingModel, cap: DeviceCapability):
     """每 tick 更新推窗器状态（仿真硬件反馈）"""
+    speed = ACTUATOR_MM_PER_TICK_ELDERLY if getattr(tm, "room_type", None) == "elderly_room" else ACTUATOR_MM_PER_TICK
     if tm.actuator_state == "extending":
-        tm.actuator_stroke_mm = min(tm.actuator_target_mm, tm.actuator_stroke_mm + ACTUATOR_MM_PER_TICK)
+        tm.actuator_stroke_mm = min(tm.actuator_target_mm, tm.actuator_stroke_mm + speed)
         tm.actuator_current_ma = 350
         tm.actuator_runtime_ms += 500
         tm.window_open_pct = (tm.actuator_stroke_mm / cap.max_stroke_mm) * 100
@@ -30,7 +32,7 @@ def simulate_actuator(tm: ThingModel, cap: DeviceCapability):
                 "open_partial" if tm.window_open_pct > 0.5 else "closed")
 
     elif tm.actuator_state == "retracting":
-        tm.actuator_stroke_mm = max(0, tm.actuator_stroke_mm - ACTUATOR_MM_PER_TICK)
+        tm.actuator_stroke_mm = max(0, tm.actuator_stroke_mm - speed)
         tm.actuator_current_ma = 320
         tm.actuator_runtime_ms += 500
         tm.window_open_pct = (tm.actuator_stroke_mm / cap.max_stroke_mm) * 100
@@ -53,16 +55,18 @@ def simulate_actuator(tm: ThingModel, cap: DeviceCapability):
 # ═══ 纱窗仿真 ═══
 
 SCREEN_PCT_PER_TICK = 12.0  # 500ms tick
+SCREEN_PCT_PER_TICK_ELDERLY = 6.0  # 适老房间慢速
 
 def simulate_screen(tm: ThingModel):
     """每 tick 更新纱窗状态"""
+    speed = SCREEN_PCT_PER_TICK_ELDERLY if getattr(tm, "room_type", None) == "elderly_room" else SCREEN_PCT_PER_TICK
     if tm.screen_motion == "rolling_down":
-        tm.screen_position_pct = min(tm.screen_target_pct, tm.screen_position_pct + SCREEN_PCT_PER_TICK)
+        tm.screen_position_pct = min(tm.screen_target_pct, tm.screen_position_pct + speed)
         if abs(tm.screen_position_pct - tm.screen_target_pct) < 2:
             tm.screen_position_pct = tm.screen_target_pct
             tm.screen_motion = "stopped"
     elif tm.screen_motion == "rolling_up":
-        tm.screen_position_pct = max(tm.screen_target_pct, tm.screen_position_pct - SCREEN_PCT_PER_TICK)
+        tm.screen_position_pct = max(tm.screen_target_pct, tm.screen_position_pct - speed)
         if abs(tm.screen_position_pct - tm.screen_target_pct) < 2:
             tm.screen_position_pct = tm.screen_target_pct
             tm.screen_motion = "stopped"

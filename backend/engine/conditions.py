@@ -76,6 +76,9 @@ NoObstacle        = _cond("无遇阻?",        lambda tm, _: tm.actuator_current
 IsUserRecentManual = _cond("用户刚手动操作?",
     lambda tm, _: (tm.user_command is not None
                    and tm.user_command.get("source") == "manual_override"))
+NoStormWarning     = _cond("无台风预警?",
+    lambda tm, _: not (tm.wind_level >= 8
+                       or (tm.wind_level >= 6 and tm.rain_level in ("heavy", "storm"))))
 
 # ═══ P5 环境自动 ═══
 def _mode_cfg(tm):
@@ -119,6 +122,20 @@ IsNoisyStudyOpen = _cond("书房噪声+窗开?",
                    and tm.noise_db > ROOMS["rooms"]["study"].get("noise_threshold_db", 60)
                    and tm.window_open_pct > 0
                    and tm.is_sensor_fresh(tm.noise_ts)))
+
+IsStormWarning = _cond("台风/暴风预警?",
+    lambda tm, _: (tm.wind_level >= 8
+                   or (tm.wind_level >= 6 and tm.rain_level in ("heavy", "storm"))))
+IsHumanAbsent  = _cond("无人在场?",
+    lambda tm, _: not tm.human_detected and tm.is_sensor_fresh(tm.human_ts))
+IsHumanPresent = _cond("有人在场?",
+    lambda tm, _: tm.human_detected and tm.is_sensor_fresh(tm.human_ts))
+IsWestSunGlare = _cond("西晒眩光?",
+    lambda tm, _: (tm.orientation in ("W", "SW", "NW")
+                   and 13 <= tm.time_hour <= 18
+                   and tm.lux > 10000))
+IsScreenUp     = _cond("纱窗收起?",
+    lambda tm, _: tm.screen_position_pct < 50)
 
 # ═══ P7 AI推荐 ═══
 HasAIRecommendation = _cond("有AI推荐?", lambda tm, _: tm.ai_recommendation is not None)

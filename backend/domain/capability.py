@@ -20,6 +20,9 @@ class DeviceCapability:
     actuator_speed_mm_per_s: float = 50.0
     screen_speed_pct_per_s: float = 20.0
     power_type: str = "adapter"
+    # 安装信息
+    orientation: str = "S"                # 窗朝向：N/S/E/W/NE/NW/SE/SW
+    room_type: str = "bedroom"            # 安装房间类型
     # 联动规则
     open_window_requires_screen_down: bool = True
     close_window_allows_screen_up: bool = True
@@ -43,6 +46,8 @@ class DeviceCapability:
             actuator_speed_mm_per_s=dev.get("actuator_speed_mm_per_s", 50.0),
             screen_speed_pct_per_s=dev.get("screen_speed_pct_per_s", 20.0),
             power_type=dev.get("power_type", "adapter"),
+            orientation=cfg.get("install", {}).get("orientation", "S"),
+            room_type=cfg.get("install", {}).get("room_type", "bedroom"),
             open_window_requires_screen_down=link.get("open_window_requires_screen_down", True),
             close_window_allows_screen_up=link.get("close_window_allows_screen_up", True),
         )

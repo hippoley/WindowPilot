@@ -43,10 +43,13 @@ from engine.conditions import (
     IsObstacle, IsMotorOverheat, IsStalled,
     IsRainDetected, IsVOCSpike,
     IsStormWind, IsAQIDangerous, IsHumidityExtreme,
+    IsStormWarning, NoStormWarning,
     IsDeviceNotReady, IsWindowOpen, IsScreenInterference,
     HasUserCommand, NoRain, NoObstacle, IsUserRecentManual,
     IsCO2High, IsHumidityHigh, IsIndoorHot, IsModeAuto, NoExistingRec,
     IsNoisyStudy,
+    IsHumanAbsent, IsHumanPresent,
+    IsWestSunGlare, IsScreenUp,
     IsElderlyRoomCold, IsChildRoomAutoLimit,
     IsChildRoomScreenUp, IsBedroomNight, IsNoisyStudyOpen,
     HasAIRecommendation,
@@ -57,6 +60,7 @@ from engine.actions import (
     ActRespectUser, ActExecuteUser,
     ActGenRec, ActShowRec, ActIdle,
     ActEnforceScreenDown, ActLimitNightOpen,
+    ActLowerScreenSun, ActCloseNoHuman,
     ActLogObstacle, ActLogOverheat,
     ActLogRain, ActLogWind, ActLogVOC, ActLogAQI,
 )
@@ -117,7 +121,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
     # ── P4 用户控制 ──
     p4 = _sel("P4 用户控制",
         _seq("尊重用户意图", n(IsUserRecentManual), n(ActRespectUser)),
-        _seq("执行指令",     n(HasUserCommand), n(NoRain), n(NoObstacle), n(ActExecuteUser)),
+        _seq("执行指令",     n(HasUserCommand), n(NoStormWarning), n(NoRain), n(NoObstacle), n(ActExecuteUser)),
     )
 
     # ── P5 环境自动 ──
@@ -126,6 +130,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
         _seq("除湿通风",  n(IsHumidityHigh), n(IsModeAuto), n(NoExistingRec), n(ActGenRec)),
         _seq("自然降温",  n(IsIndoorHot),    n(IsModeAuto), n(NoExistingRec), n(ActGenRec)),
         _seq("书房降噪",  n(IsNoisyStudy),   n(IsModeAuto), n(NoExistingRec), n(ActGenRec)),
+        _seq("无人节能",  n(IsHumanAbsent),  n(IsModeAuto), n(ActCloseNoHuman)),
     )
 
     # ── P6 房间策略 ──
@@ -135,6 +140,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
         _seq("儿童房纱窗放下",   n(IsChildRoomScreenUp),  n(ActEnforceScreenDown)),
         _seq("卧室夜间限速",     n(IsBedroomNight),       n(ActLimitNightOpen)),
         _seq("书房噪声关窗",     n(IsNoisyStudyOpen),     n(ActCloseWindow)),
+        _seq("西晒遮光",         n(IsWestSunGlare),       n(IsScreenUp), n(ActLowerScreenSun)),
     )
 
     # ── P7 AI推荐 ──
