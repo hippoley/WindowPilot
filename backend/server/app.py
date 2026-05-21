@@ -71,14 +71,6 @@ ALLOWED_SENSOR_KEYS = {
 connected: Set[WebSocket] = set()
 tick_count = 0
 
-# 允许通过 set_sensor 设置的字段白名单
-_SETTABLE_SENSORS = {
-    "rain_detected", "rain_level", "voc_mg", "co2_ppm",
-    "temp_indoor_c", "temp_outdoor_c", "humidity_pct",
-    "wind_speed_ms", "wind_level", "lux", "human_detected",
-    "noise_db", "aqi", "room_type", "time_hour", "orientation",
-}
-
 # ── 行为树单例：只建一次，每 tick 只调 tick_once() ──
 _bt_tree = None
 
