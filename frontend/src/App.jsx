@@ -22,26 +22,31 @@ export default function App() {
 
   useEffect(() => {
     let ws
+    let reconnectTimer
     function connect() {
       ws = new WebSocket(WS_URL)
       wsRef.current = ws
       ws.onopen = () => setConnected(true)
-      ws.onclose = () => { setConnected(false); setTimeout(connect, 2000) }
+      ws.onclose = () => { setConnected(false); reconnectTimer = setTimeout(connect, 2000) }
       ws.onerror = () => ws.close()
       ws.onmessage = (evt) => {
-        const data = JSON.parse(evt.data)
-        if (data.type === 'tick') {
-          setTick(data.tick)
-          setTm(data.thing_model)
-          setTree(data.tree)
-          setSemantic(data.semantic || { tags: [] })
-          setBtBranch(data.bt_branch || '...')
-          setLog(data.decision_log || [])
+        try {
+          const data = JSON.parse(evt.data)
+          if (data.type === 'tick') {
+            setTick(data.tick)
+            setTm(data.thing_model)
+            setTree(data.tree)
+            setSemantic(data.semantic || { tags: [] })
+            setBtBranch(data.bt_branch || '...')
+            setLog(data.decision_log || [])
+          }
+        } catch (e) {
+          console.error('[WS] Failed to parse message:', e)
         }
       }
     }
     connect()
-    return () => { if (ws) ws.close() }
+    return () => { clearTimeout(reconnectTimer); if (ws) ws.close() }
   }, [])
 
   // 从 thing_model 提取数据
@@ -199,11 +204,11 @@ function TreeNode({ node, depth }) {
   const dot = s === 'success' ? '●' : s === 'failure' ? '○' : s === 'running' ? '◉' : '·'
   return (
     <div>
-      <div style={{ paddingLeft: depth * 12, fontSize: 10, fontFamily: 'monospace', color, padding: '1px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ marginLeft: depth * 12, fontSize: 10, fontFamily: 'monospace', color, padding: '1px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
         <span>{dot}</span>
         <span>{node.name}</span>
       </div>
-      {node.children && node.children.map((c, i) => <TreeNode key={i} node={c} depth={depth + 1} />)}
+      {node.children && node.children.map((c, i) => <TreeNode key={c.name || c.id || i} node={c} depth={depth + 1} />)}
     </div>
   )
 }

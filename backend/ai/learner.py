@@ -38,6 +38,7 @@ class MemoryEntry:
         if now_ts is None:
             now_ts = time.time()
         delta_day = (now_ts - self.last_used_ts) / 86400.0
+        delta_day = max(0, min(delta_day, 365))
         strength_init = 0.5  # 初始强度基线
 
         opt_strength = self.opt_strength

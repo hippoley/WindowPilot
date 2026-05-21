@@ -3,7 +3,9 @@ WindowPilot 服务层 — FastAPI + WebSocket + Tick Loop + 静态文件
 """
 import asyncio
 import json
+import logging
 import time
+import traceback
 import sys
 from pathlib import Path
 from typing import Set
@@ -56,9 +58,26 @@ ai_explainer = Explainer(ai_client) if ai_client else None
 ai_learner   = HabitLearner()
 rule_fallback = RuleFallback()
 
+ALLOWED_SENSOR_KEYS = {
+    "rain_detected", "rain_level", "voc_mg", "co2_ppm",
+    "temp_indoor_c", "temp_outdoor_c", "humidity_pct",
+    "wind_speed_ms", "wind_level", "lux", "human_detected",
+    "noise_db", "aqi", "rain_ts", "voc_ts", "co2_ts",
+    "temp_ts", "humidity_ts", "wind_ts", "lux_ts",
+    "human_ts", "noise_ts", "aqi_ts",
+}
+
 # WebSocket 连接池
 connected: Set[WebSocket] = set()
 tick_count = 0
+
+# 允许通过 set_sensor 设置的字段白名单
+_SETTABLE_SENSORS = {
+    "rain_detected", "rain_level", "voc_mg", "co2_ppm",
+    "temp_indoor_c", "temp_outdoor_c", "humidity_pct",
+    "wind_speed_ms", "wind_level", "lux", "human_detected",
+    "noise_db", "aqi", "room_type", "time_hour", "orientation",
+}
 
 # ── 行为树单例：只建一次，每 tick 只调 tick_once() ──
 _bt_tree = None
@@ -84,89 +103,93 @@ async def tick_loop():
     global tick_count
     while True:
         await asyncio.sleep(0.5)
-        tick_count += 1
-        tm.bt_tick = tick_count
+        try:
+            tick_count += 1
+            tm.bt_tick = tick_count
 
-        # 1. 仿真执行器
-        simulate_actuator(tm, cap)
-        simulate_screen(tm)
-        coordinator.tick(tm)
+            # 1. 仿真执行器
+            simulate_actuator(tm, cap)
+            simulate_screen(tm)
+            coordinator.tick(tm)
 
-        # 2. 语义快照
-        snapshot = ContextSnapshot.from_thing_model(tm, cap)
+            # 2. 语义快照
+            snapshot = ContextSnapshot.from_thing_model(tm, cap)
 
-        # 3. P5 标记需要生成推荐时，调用 AI 链路
-        if tm.bt_active_branch == "P5.NeedGenerate" and tm.ai_recommendation is None:
-            goal = ai_goal.infer(tm, snapshot)
-            trace.record(tm, "AI-2.Goal",
-                         f"{goal.get('primary_goal','?')} conflict={goal.get('conflict','none')}",
-                         "success")
+            # 3. 执行行为树（单例，不重建）
+            tree = _get_tree()
+            tree.tick_once()
 
-            candidates = []
-            if ai_retriever:
-                candidates = ai_retriever.retrieve(snapshot, cap)
-            if not candidates:
-                fb = rule_fallback.generate(tm, snapshot, cap)
-                if fb:
-                    candidates = [{"candidate": fb, "similarity": 0.5, "story_id": "fallback"}]
+            # 4. P5 标记需要生成推荐时，调用 AI 链路
+            if tm.bt_active_branch == "P5.NeedGenerate" and tm.ai_recommendation is None:
+                goal = ai_goal.infer(tm, snapshot)
+                trace.record(tm, "AI-2.Goal",
+                             f"{goal.get('primary_goal','?')} conflict={goal.get('conflict','none')}",
+                             "success")
 
-            if candidates:
-                ranked = ai_ranker.rank(candidates, tm, snapshot, cap)
-                if ranked:
-                    best = ranked[0].get("candidate", ranked[0])
-                    # 安全裁剪
-                    if "CHILD_ROOM_HIGH_SAFETY" in snapshot.tags:
-                        best["window_pct"] = min(best.get("window_pct", 10), 10)
-                        best["needs_confirm"] = True
-                    if any(t in snapshot.tags for t in ("RAIN_LIGHT", "RAIN_MODERATE",
-                                                         "RAIN_HEAVY", "RAIN_STORM", "RAIN_NOW")):
-                        best["window_pct"] = min(best.get("window_pct", 0), 0)
-                    # 解释
-                    reason = ""
-                    if ai_explainer:
-                        reason = ai_explainer.explain(tm, snapshot, best)
-                    if not reason:
-                        reason = (ai_explainer._rule_explain(tm, snapshot, best)
-                                  if ai_explainer
-                                  else f"建议开窗{best.get('window_pct', 0)}%")
-                    best["title"] = best.get("title", "建议调整窗户")
-                    best["reason"] = reason
-                    best["needs_confirm"] = best.get("needs_confirm", True)
-                    # 偏好微调
-                    preferred = ai_learner.get_preferred_pct(tm.room_type, tm.time_hour)
-                    if ai_learner.get_confidence() > 0.3:
-                        best["window_pct"] = int((best.get("window_pct", 30) + preferred) / 2)
-                    tm.ai_recommendation = best
-                    trace.record(tm, "AI.Pipeline",
-                                 f"retrieve→rank→explain: {best.get('window_pct')}%", "success")
+                candidates = []
+                if ai_retriever:
+                    candidates = ai_retriever.retrieve(snapshot, cap)
+                if not candidates:
+                    fb = rule_fallback.generate(tm, snapshot, cap)
+                    if fb:
+                        candidates = [{"candidate": fb, "similarity": 0.5, "story_id": "fallback"}]
 
-        # 4. 执行行为树（单例，不重建）
-        tree = _get_tree()
-        tree.tick_once()
+                if candidates:
+                    ranked = ai_ranker.rank(candidates, tm, snapshot, cap)
+                    if ranked:
+                        best = ranked[0].get("candidate", ranked[0])
+                        # 安全裁剪
+                        if "CHILD_ROOM_HIGH_SAFETY" in snapshot.tags:
+                            best["window_pct"] = min(best.get("window_pct", 10), 10)
+                            best["needs_confirm"] = True
+                        if any(t in snapshot.tags for t in ("RAIN_LIGHT", "RAIN_MODERATE",
+                                                             "RAIN_HEAVY", "RAIN_STORM", "RAIN_NOW")):
+                            best["window_pct"] = min(best.get("window_pct", 0), 0)
+                        # 解释
+                        reason = ""
+                        if ai_explainer:
+                            reason = ai_explainer.explain(tm, snapshot, best)
+                        if not reason:
+                            reason = (ai_explainer._rule_explain(tm, snapshot, best)
+                                      if ai_explainer
+                                      else f"建议开窗{best.get('window_pct', 0)}%")
+                        best["title"] = best.get("title", "建议调整窗户")
+                        best["reason"] = reason
+                        best["needs_confirm"] = best.get("needs_confirm", True)
+                        # 偏好微调
+                        preferred = ai_learner.get_preferred_pct(tm.room_type, tm.time_hour)
+                        if ai_learner.get_confidence() > 0.3:
+                            best["window_pct"] = int((best.get("window_pct", 30) + preferred) / 2)
+                        tm.ai_recommendation = best
+                        trace.record(tm, "AI.Pipeline",
+                                     f"retrieve→rank→explain: {best.get('window_pct')}%", "success")
 
-        # 5. 到位后清除用户指令
-        if tm.user_command and tm.user_command.get("action") == "open_to":
-            target = tm.user_command.get("target_pct", 0)
-            if tm.actuator_state in ("idle", "holding") and abs(tm.window_open_pct - target) < 3:
-                tm.user_command = None
+            # 5. 到位后清除用户指令
+            if tm.user_command and tm.user_command.get("action") == "open_to":
+                target = tm.user_command.get("target_pct", 0)
+                if tm.actuator_state in ("idle", "holding") and abs(tm.window_open_pct - target) < 3:
+                    tm.user_command = None
 
-        # 6. 构建树快照并广播
-        tree_snapshot = _build_tree_snapshot(tree)
-        payload = {
-            "type": "tick",
-            "tick": tick_count,
-            "ts": time.time(),
-            "thing_model": tm.to_dict(),
-            "semantic": {
-                "tags": snapshot.tags,
-                "summary": snapshot.summary,
-                "risk": snapshot.risk_level,
-            },
-            "tree": tree_snapshot,
-            "decision_log": trace.recent(10),
-            "bt_branch": tm.bt_active_branch,
-        }
-        await _broadcast(payload)
+            # 6. 构建树快照并广播
+            tree_snapshot = _build_tree_snapshot(tree)
+            payload = {
+                "type": "tick",
+                "tick": tick_count,
+                "ts": time.time(),
+                "thing_model": tm.to_dict(),
+                "semantic": {
+                    "tags": snapshot.tags,
+                    "summary": snapshot.summary,
+                    "risk": snapshot.risk_level,
+                },
+                "tree": tree_snapshot,
+                "decision_log": trace.recent(10),
+                "bt_branch": tm.bt_active_branch,
+            }
+            await _broadcast(payload)
+        except Exception as e:
+            print(f"[tick_loop] ERROR tick={tick_count}: {e}")
+            traceback.print_exc()
 
 
 def _build_tree_snapshot(node, path="") -> dict:
@@ -191,7 +214,7 @@ async def _broadcast(data: dict):
         return
     msg = json.dumps(data, ensure_ascii=False)
     dead = set()
-    for ws in connected:
+    for ws in list(connected):
         try:
             await ws.send_text(msg)
         except Exception:
@@ -208,7 +231,11 @@ async def ws_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            msg = json.loads(data)
+            try:
+                msg = json.loads(data)
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"[ws] invalid JSON from client: {e}", flush=True)
+                continue
             await handle_command(msg)
     except WebSocketDisconnect:
         connected.discard(websocket)
@@ -220,7 +247,7 @@ async def handle_command(msg: dict):
     key   = msg.get("key")
 
     if cmd == "set_sensor":
-        if key and hasattr(tm, key):
+        if key in ALLOWED_SENSOR_KEYS:
             field_type = type(getattr(tm, key))
             if field_type == bool:
                 setattr(tm, key, bool(value))

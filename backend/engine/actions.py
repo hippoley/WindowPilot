@@ -12,6 +12,11 @@ from domain.thing_model import ThingModel
 from domain.capability import DeviceCapability
 from domain.decision_trace import DecisionTraceLog
 
+# Cache room strategies config (loaded once at import time)
+_room_cfg_path = Path(__file__).parent.parent / "config" / "room_strategies.yaml"
+with open(_room_cfg_path) as _f:
+    _ROOM_CFG = yaml.safe_load(_f).get("rooms", {})
+
 
 def _action(name, fn):
     """
@@ -224,12 +229,7 @@ def _enforce_screen_down(tm, cap, trace):
 
 def _limit_night_open(tm, cap, trace):
     """夜间限制最大开度（卧室 sleep_max_open_pct 策略）"""
-    import yaml
-    from pathlib import Path
-    _cfg_path = Path(__file__).parent.parent / "config" / "room_strategies.yaml"
-    with open(_cfg_path) as f:
-        rooms = yaml.safe_load(f).get("rooms", {})
-    sleep_max = rooms.get("bedroom", {}).get("sleep_max_open_pct", 15)
+    sleep_max = _ROOM_CFG.get("bedroom", {}).get("sleep_max_open_pct", 15)
     if tm.window_open_pct > sleep_max:
         tm.window_target_pct = sleep_max
         target_mm = (sleep_max / 100.0) * cap.max_stroke_mm

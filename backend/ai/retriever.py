@@ -16,7 +16,7 @@ from domain.capability import DeviceCapability
 USER_STORIES = [
     {"id": "s001", "tags": ["CO2_HIGH", "BEDROOM", "NIGHT_TIME"], "action": "open_10_screen_down_15min", "desc": "卧室夜间CO₂高，微开10%通风15分钟"},
     {"id": "s002", "tags": ["CO2_VERY_HIGH", "BEDROOM"], "action": "open_30_screen_down_20min", "desc": "卧室CO₂很高，开窗30%通风20分钟"},
-    {"id": "s003", "tags": ["RAIN_NOW", "CO2_HIGH", "CHILD_ROOM"], "action": "open_10_screen_down_10min_confirm", "desc": "儿童房下雨+CO₂高，微开10%需确认"},
+    {"id": "s003", "tags": ["RAIN_NOW", "CO2_HIGH", "CHILD_ROOM_HIGH_SAFETY"], "action": "open_10_screen_down_10min_confirm", "desc": "儿童房下雨+CO₂高，微开10%需确认"},
     {"id": "s004", "tags": ["HUMIDITY_HIGH", "BEDROOM"], "action": "open_20_screen_down_15min", "desc": "卧室湿度高，开窗20%除湿"},
     {"id": "s005", "tags": ["INDOOR_HOT_OUTDOOR_COOL"], "action": "open_40_screen_down_30min", "desc": "室内热室外凉，开窗40%自然降温"},
     {"id": "s006", "tags": ["NOISE_HIGH", "STUDY_ROOM"], "action": "close_window", "desc": "书房噪声高，关窗降噪"},
