@@ -1,0 +1,37 @@
+# 安全规则配置 — 所有阈值从这里读取，不写死在代码里
+safety:
+  p0_emergency:
+    obstacle_current_ma: 800
+    pinch_reverse_pct: 2
+    motor_max_temp_c: 60
+    stall_timeout_ms: 3000
+
+  p1_local_sensor:
+    rain_action: close_0
+    voc_threshold_mg: 0.6
+    voc_action: close_0
+
+  p2_weather:
+    storm_wind_level: 6
+    storm_wind_speed_ms: 10.8
+    aqi_threshold: 200
+    humidity_threshold: 90
+
+modes:
+  ventilation_first:
+    default_open_pct: 30
+    max_open_pct: 100
+    co2_threshold: 800
+    humidity_threshold: 70
+    temp_diff_threshold: 3
+
+  wind_protect:
+    default_open_pct: 15
+    max_open_pct: 30
+    co2_threshold: 1000
+
+  safety_first:
+    default_open_pct: 10
+    max_open_pct: 15
+    require_confirm: true
+    co2_threshold: 1200

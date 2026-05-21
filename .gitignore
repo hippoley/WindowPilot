@@ -1,0 +1,55 @@
+# ── 参考文档（不跟踪）──
+docs/
+reference1.0/
+reference2.0/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── 虚拟环境 ──
+venv/
+.venv/
+env/
+.env/
+backend/venv/
+
+# ── 环境变量 / 密钥 ──
+.env
+.env.*
+*.key
+*.pem
+secrets.yaml
+ai_config.yaml
+
+# ── Node / 前端 ──
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.npm/
+*.tsbuildinfo
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── 日志 / 临时文件 ──
+*.log
+*.tmp
+*.bak
+*.orig

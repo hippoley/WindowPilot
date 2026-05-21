@@ -1,0 +1,29 @@
+# 房间策略配置
+rooms:
+  child_room:
+    max_auto_open_pct: 10
+    require_parent_confirm: true
+    safety_priority: highest
+    screen_always_down: true
+    night_close: true
+
+  elderly_room:
+    cold_protection_temp_c: 18
+    auto_close_at_night: true
+    gentle_speed: true
+    max_auto_open_pct: 30
+
+  bedroom:
+    night_mode_start: 22
+    night_mode_end: 7
+    sleep_max_open_pct: 15
+    default_open_pct: 30
+
+  study:
+    focus_mode_close: true
+    noise_threshold_db: 60
+    default_open_pct: 25
+
+  living_room:
+    default_open_pct: 40
+    max_auto_open_pct: 80

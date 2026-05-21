@@ -1,0 +1,38 @@
+/* WindowPilot — 栖息地智能家居 · 暖色科技风 */
+:root {
+    --accent: #D4A574;
+    --accent2: #C4956A;
+    --accent3: #E8C99A;
+    --grad: linear-gradient(135deg, #D4A574 0%, #C4956A 60%, #8B5E3C 100%);
+    --grad-soft: linear-gradient(135deg, rgba(212, 165, 116, .1) 0%, rgba(196, 149, 106, .1) 100%);
+    --bg: #100C06;
+    --bg2: #160F08;
+    --surface: rgba(255, 235, 200, 0.04);
+    --glass: rgba(255, 235, 200, 0.07);
+    --glass-border: rgba(212, 165, 116, 0.12);
+    --success: #7EC8A0;
+    --warning: #E8B86D;
+    --danger: #E07070;
+    --text: #F5ECD7;
+    --text-sub: #A89070;
+    --text-muted: #5C4A35;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'SF Pro Display', 'PingFang SC', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
+}
+
+#root {
+    height: 100vh;
+}

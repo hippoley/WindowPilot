@@ -1,0 +1,19 @@
+# 设备能力画像配置
+device:
+  model: CWDS-CA01
+  product_type: smart_window_screen_integrated
+  window_type: 外平开窗
+  screen_type: motorized  # manual / motorized
+  has_screen_interference: true
+  supports_percent_control: true
+  supports_linkage: true
+  max_stroke_mm: 530
+  actuator_speed_mm_per_s: 50
+  screen_speed_pct_per_s: 20
+  power_type: adapter  # adapter / battery_solar
+
+linkage:
+  # 窗纱联动规则
+  open_window_requires_screen_down: true
+  close_window_allows_screen_up: true
+  screen_down_before_open_delay_ms: 500

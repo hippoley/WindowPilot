@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>WindowPilot Test</title>
+</head>
+
+<body style="background:#111;color:#fff;font-family:monospace;padding:20px">
+  <h2>WindowPilot WebSocket 测试</h2>
+  <div id="status">连接中...</div>
+  <div id="wsurl" style="font-size:10px;color:#888"></div>
+  <br>
+  <button onclick="send({cmd:'user_open_to',value:50})">开窗50%</button>
+  <button onclick="send({cmd:'load_scenario',value:'storm_emergency'})">暴雨场景</button>
+  <button onclick="send({cmd:'set_sensor',key:'co2_ppm',value:1300})">CO₂→1300</button>
+  <button onclick="send({cmd:'reset'})">重置</button>
+  <pre id="log" style="font-size:11px;max-height:500px;overflow:auto"></pre>
+  <script>
+    // 自动检测主机名（解决远程访问问题）
+    var host = window.location.hostname || 'localhost';
+    var wsUrl = 'ws://' + host + ':8001/ws';
+    document.getElementById('wsurl').textContent = 'WS: ' + wsUrl;
+
+    var ws;
+    function connect() {
+      document.getElementById('status').textContent = '连接: ' + wsUrl;
+      ws = new WebSocket(wsUrl);
+      ws.onopen = function () { document.getElementById('status').textContent = '✓ 已连接 ' + wsUrl; };
+      ws.onclose = function () { document.getElementById('status').textContent = '✗ 断开'; setTimeout(connect, 2000); };
+      ws.onerror = function (e) { document.getElementById('status').textContent = '✗ 错误: ' + wsUrl; };
+      ws.onmessage = function (e) {
+        var data = JSON.parse(e.data);
+        if (data.type === 'tick') {
+          var tm = data.thing_model;
+          var w = tm.window;
+          var a = tm.actuator;
+          var s = tm.screen;
+          document.getElementById('log').textContent =
+            'Tick #' + data.tick + '\n' +
+            '窗户: ' + w.open_pct.toFixed(1) + '% [' + w.state + '] 目标:' + w.target_pct + '%\n' +
+            '纱窗: ' + s.position_pct.toFixed(1) + '% [' + s.motion + ']\n' +
+            '推窗器: ' + a.state + ' 行程:' + a.stroke_mm.toFixed(0) + 'mm 电流:' + a.current_ma + 'mA\n' +
+            '分支: ' + data.bt_branch + '\n' +
+            '语义: ' + (data.semantic && data.semantic.tags ? data.semantic.tags.join(', ') : '') + '\n' +
+            '推荐: ' + (tm.ai && tm.ai.card ? tm.ai.card.reason : '无') + '\n' +
+            '日志: ' + (data.decision_log || []).slice(0, 3).map(function (e) { return e.branch + ':' + e.action }).join(' | ');
+        }
+      };
+    }
+    function send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
+    connect();
+  </script>
+</body>
+
+</html>
