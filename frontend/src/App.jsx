@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import BehaviorTreeGraph from './components/BehaviorTree'
 import './App.css'
 
 const WS_URL = `ws://${window.location.hostname || 'localhost'}:8001/ws`
@@ -6,6 +7,7 @@ const WS_URL = `ws://${window.location.hostname || 'localhost'}:8001/ws`
 export default function App() {
   const [connected, setConnected] = useState(false)
   const [state, setState] = useState({ tick: 0, tm: null, tree: null, semantic: { tags: [] }, btBranch: '...', log: [], aiStatus: 'idle', agents: {} })
+  const [treeView, setTreeView] = useState('compact') // 'compact' | 'graph'
   const wsRef = useRef(null)
   const rafRef = useRef(null)
   const pendingRef = useRef(null)
@@ -141,7 +143,15 @@ export default function App() {
         {semantic.summary && <div style={{ fontSize: 9, color: '#A89070', marginBottom: 10, fontStyle: 'italic' }}>{semantic.summary}</div>}
 
         <SectionTitle text="行为树" />
-        {tree ? <TreeNode node={tree} depth={0} /> : <div style={{ color: '#5C4A35' }}>等待数据...</div>}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          <button onClick={() => setTreeView('compact')} style={{ padding: '2px 6px', fontSize: 9, borderRadius: 4, border: '1px solid rgba(212,165,116,0.2)', background: treeView === 'compact' ? 'rgba(212,165,116,0.2)' : 'transparent', color: '#D4A574', cursor: 'pointer' }}>列表</button>
+          <button onClick={() => setTreeView('graph')} style={{ padding: '2px 6px', fontSize: 9, borderRadius: 4, border: '1px solid rgba(212,165,116,0.2)', background: treeView === 'graph' ? 'rgba(212,165,116,0.2)' : 'transparent', color: '#D4A574', cursor: 'pointer' }}>图形</button>
+        </div>
+        {tree ? (
+          treeView === 'graph'
+            ? <div style={{ height: 400, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(212,165,116,0.15)' }}><BehaviorTreeGraph node={tree} /></div>
+            : <TreeNode node={tree} depth={0} />
+        ) : <div style={{ color: '#5C4A35' }}>等待数据...</div>}
 
         {log.length > 0 && (<>
           <SectionTitle text="决策日志" />

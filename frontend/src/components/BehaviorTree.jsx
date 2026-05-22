@@ -1,29 +1,20 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback, useEffect } from 'react'
+import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider } from 'reactflow'
+import 'reactflow/dist/style.css'
 
-// ─── 常量 ────────────────────────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
+const TYPE_LABELS = { Selector: 'SEL', Sequence: 'SEQ', Behaviour: 'ACT' }
+const NODE_SIZES = { Selector: { w: 140, h: 36 }, Sequence: { w: 130, h: 32 }, Behaviour: { w: 120, h: 28 } }
+const H_GAP = 20, V_GAP = 70
 
-const TYPE_LABELS = {
-  Selector: 'SEL',
-  Sequence: 'SEQ',
-  Behaviour: 'ACT',
+const STATUS_COLORS = {
+  success: { border: '#34d399', bg: 'rgba(52,211,153,0.12)', shadow: '0 0 8px #34d399' },
+  failure: { border: '#6b7280', bg: 'rgba(107,114,128,0.08)', shadow: 'none' },
+  running: { border: '#fbbf24', bg: 'rgba(251,191,36,0.12)', shadow: '0 0 10px #fbbf24' },
+  invalid: { border: '#4b5563', bg: 'transparent', shadow: 'none' },
 }
 
-const STATUS_COLOR = {
-  success: 'var(--success)',
-  failure: 'var(--danger)',
-  running: 'var(--warning)',
-  invalid: 'var(--text-muted)',
-}
-
-const STATUS_BG = {
-  running: 'rgba(251,191,36,0.08)',
-  success: 'rgba(52,211,153,0.07)',
-  failure: 'transparent',
-  invalid: 'transparent',
-}
-
-// ─── 统计工具 ─────────────────────────────────────────────────────────────────
-
+// ─── Stats ──────────────────────────────────────────────────────────────────
 function collectStats(node, acc = { running: 0, success: 0, failure: 0 }) {
   if (!node) return acc
   if (node.status === 'running') acc.running++
@@ -33,193 +24,156 @@ function collectStats(node, acc = { running: 0, success: 0, failure: 0 }) {
   return acc
 }
 
-// ─── 摘要卡片 ─────────────────────────────────────────────────────────────────
-
-const summaryStyle = {
-  display: 'flex',
-  gap: 8,
-  padding: '8px 10px',
-  marginBottom: 10,
-  borderRadius: 8,
-  background: 'var(--surface)',
-  border: '1px solid var(--glass-border)',
-}
-
-const statItemStyle = (color) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 5,
-  fontSize: 11,
-  fontWeight: 600,
-  color,
-  flex: 1,
-  justifyContent: 'center',
-})
-
-const statDotStyle = (color) => ({
-  width: 7,
-  height: 7,
-  borderRadius: '50%',
-  background: color,
-  flexShrink: 0,
-})
-
+// ─── Summary Card ───────────────────────────────────────────────────────────
 function SummaryCard({ stats }) {
+  const item = (color, count, label) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color, flex: 1, justifyContent: 'center' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+      {count} {label}
+    </div>
+  )
+  const sep = <div style={{ width: 1, background: 'var(--glass-border)', alignSelf: 'stretch' }} />
   return (
-    <div style={summaryStyle}>
-      <div style={statItemStyle('var(--warning)')}>
-        <span style={statDotStyle('var(--warning)')} />
-        {stats.running} 运行中
-      </div>
-      <div style={{ width: 1, background: 'var(--glass-border)', alignSelf: 'stretch' }} />
-      <div style={statItemStyle('var(--success)')}>
-        <span style={statDotStyle('var(--success)')} />
-        {stats.success} 成功
-      </div>
-      <div style={{ width: 1, background: 'var(--glass-border)', alignSelf: 'stretch' }} />
-      <div style={statItemStyle('var(--danger)')}>
-        <span style={statDotStyle('var(--danger)')} />
-        {stats.failure} 失败
-      </div>
+    <div style={{ display: 'flex', gap: 8, padding: '8px 10px', marginBottom: 6, borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
+      {item('var(--warning)', stats.running, '运行中')}{sep}{item('var(--success)', stats.success, '成功')}{sep}{item('var(--danger)', stats.failure, '失败')}
     </div>
   )
 }
 
-// ─── 单节点 ───────────────────────────────────────────────────────────────────
+// ─── Tree layout ────────────────────────────────────────────────────────────
+function measureSubtree(node) {
+  const size = NODE_SIZES[node.type] || NODE_SIZES.Behaviour
+  if (!node.children || node.children.length === 0) return size.w
+  const childrenWidth = node.children.reduce((sum, c) => sum + measureSubtree(c), 0)
+  return Math.max(size.w, childrenWidth + (node.children.length - 1) * H_GAP)
+}
 
-const INDENT_W = 18   // 每层缩进宽度 px
-const LINE_COLOR = 'rgba(255,255,255,0.10)'
+function getActivePath(node, path = new Set()) {
+  if (!node) return path
+  if (node.status === 'success' || node.status === 'running') {
+    path.add(node.id)
+    if (node.children) node.children.forEach(c => getActivePath(c, path))
+  }
+  return path
+}
 
-function BTNode({ node, depth, isLast }) {
-  const isComposite = node.children && node.children.length > 0
-  const typeLabel = TYPE_LABELS[node.type] || (isComposite ? 'CMP' : 'ACT')
-  const dotColor = STATUS_COLOR[node.status] || 'var(--text-muted)'
-  const bg = STATUS_BG[node.status] || 'transparent'
-  const isRunning = node.status === 'running'
+function buildFlowData(node, x, y, parentId, nodes, edges, activePath) {
+  const size = NODE_SIZES[node.type] || NODE_SIZES.Behaviour
+  const isActive = activePath.has(node.id)
+
+  nodes.push({
+    id: node.id,
+    position: { x: x - size.w / 2, y },
+    data: { label: node.name, type: node.type, status: node.status },
+    type: 'btNode',
+    style: { width: size.w, height: size.h },
+  })
+
+  if (parentId) {
+    edges.push({
+      id: `${parentId}->${node.id}`,
+      source: parentId,
+      target: node.id,
+      type: 'smoothstep',
+      animated: node.status === 'running',
+      style: { stroke: isActive ? '#D4A574' : 'rgba(255,255,255,0.15)', strokeWidth: isActive ? 2.5 : 1.2 },
+    })
+  }
+
+  if (node.children && node.children.length > 0) {
+    const totalWidth = node.children.reduce((s, c) => s + measureSubtree(c), 0) + (node.children.length - 1) * H_GAP
+    let offsetX = x - totalWidth / 2
+    for (const child of node.children) {
+      const cw = measureSubtree(child)
+      buildFlowData(child, offsetX + cw / 2, y + V_GAP, node.id, nodes, edges, activePath)
+      offsetX += cw + H_GAP
+    }
+  }
+}
+
+// ─── Custom Node ────────────────────────────────────────────────────────────
+function BTNodeComponent({ data }) {
+  const { label, type, status } = data
+  const sc = STATUS_COLORS[status] || STATUS_COLORS.invalid
+  const typeLabel = TYPE_LABELS[type] || 'ACT'
+  const isRunning = status === 'running'
+  const borderRadius = type === 'Sequence' ? 4 : 14
 
   return (
-    <div style={{ position: 'relative' }}>
-      {/* 节点行 */}
-      <div
-        title={`${node.type} — ${node.status}`}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 8px 4px 0',
-          paddingLeft: depth * INDENT_W,
-          borderRadius: 6,
-          background: bg,
-          cursor: 'default',
-          transition: 'background 0.2s',
-          position: 'relative',
-        }}
-        onMouseEnter={e => {
-          if (!isRunning && node.status !== 'success')
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = bg
-        }}
-      >
-        {/* 缩进连接线 */}
-        {depth > 0 && (
-          <div style={{
-            position: 'absolute',
-            left: (depth - 1) * INDENT_W + 8,
-            top: 0,
-            bottom: isLast ? '50%' : 0,
-            width: 1,
-            background: LINE_COLOR,
-            pointerEvents: 'none',
-          }} />
-        )}
-        {depth > 0 && (
-          <div style={{
-            position: 'absolute',
-            left: (depth - 1) * INDENT_W + 8,
-            top: '50%',
-            width: INDENT_W - 8,
-            height: 1,
-            background: LINE_COLOR,
-            pointerEvents: 'none',
-          }} />
-        )}
-
-        {/* 状态圆点 */}
-        <span style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: dotColor,
-          flexShrink: 0,
-          boxShadow: isRunning ? `0 0 6px 2px ${dotColor}` : 'none',
-          animation: isRunning ? 'btPulse 1.2s ease-in-out infinite' : 'none',
-        }} />
-
-        {/* 节点名称 */}
-        <span style={{
-          flex: 1,
-          fontSize: 12,
-          color: isRunning ? 'var(--text)' : 'var(--text-sub)',
-          fontWeight: isRunning ? 600 : 400,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          transition: 'color 0.2s',
-        }}>
-          {node.name}
-        </span>
-
-        {/* 类型标签 */}
-        <span style={{
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: '0.05em',
-          padding: '1px 5px',
-          borderRadius: 4,
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid var(--glass-border)',
-          color: 'var(--text-muted)',
-          flexShrink: 0,
-          fontFamily: 'monospace',
-        }}>
-          {typeLabel}
-        </span>
-      </div>
-
-      {/* 子节点 */}
-      {isComposite && node.children.map((child, i) => (
-        <BTNode
-          key={child.id || i}
-          node={child}
-          depth={depth + 1}
-          isLast={i === node.children.length - 1}
-        />
-      ))}
+    <div style={{
+      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+      background: sc.bg, border: `1.5px solid ${sc.border}`, borderRadius,
+      boxShadow: sc.shadow, padding: '0 8px', boxSizing: 'border-box',
+      animation: isRunning ? 'btPulse 1.8s ease-in-out infinite' : 'none',
+      transition: 'border-color 0.3s, box-shadow 0.3s, background 0.3s',
+    }}>
+      <span style={{ fontSize: 10, color: '#e5e5e5', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#a3a3a3', fontFamily: 'monospace', flexShrink: 0 }}>
+        {typeLabel}
+      </span>
     </div>
   )
 }
 
-// ─── 主组件 ───────────────────────────────────────────────────────────────────
+const nodeTypes = { btNode: BTNodeComponent }
 
-export default function BehaviorTree({ node, depth = 0 }) {
+// ─── Flow wrapper (needs ReactFlowProvider context) ─────────────────────────
+function FlowCanvas({ nodes, edges }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => { fitView({ padding: 0.15, duration: 300 }) }, [nodes, fitView])
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      fitView
+      proOptions={{ hideAttribution: true }}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable={false}
+      minZoom={0.3}
+      maxZoom={2}
+      style={{ background: 'transparent' }}
+    >
+      <Background color="rgba(255,255,255,0.03)" gap={20} />
+      <Controls showInteractive={false} style={{ background: '#1a1510', borderColor: 'rgba(255,255,255,0.1)' }} />
+    </ReactFlow>
+  )
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
+export default function BehaviorTree({ node }) {
   const stats = useMemo(() => collectStats(node), [node])
+  const { nodes, edges } = useMemo(() => {
+    if (!node) return { nodes: [], edges: [] }
+    const n = [], e = []
+    const activePath = getActivePath(node)
+    buildFlowData(node, 0, 0, null, n, e, activePath)
+    return { nodes: n, edges: e }
+  }, [node])
 
   if (!node) return null
 
   return (
-    <div style={{ fontFamily: 'inherit' }}>
+    <div style={{ fontFamily: 'inherit', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes btPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.5; transform: scale(0.75); }
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.55; }
         }
+        .react-flow__node { background: transparent !important; border: none !important; padding: 0 !important; }
+        .react-flow__controls button { background: #1a1510; color: #D4A574; border-color: rgba(255,255,255,0.1); }
+        .react-flow__controls button:hover { background: #2a2015; }
       `}</style>
-
-      {depth === 0 && <SummaryCard stats={stats} />}
-
-      <BTNode node={node} depth={depth} isLast={true} />
+      <SummaryCard stats={stats} />
+      <div style={{ flex: 1, minHeight: 200 }}>
+        <ReactFlowProvider>
+          <FlowCanvas nodes={nodes} edges={edges} />
+        </ReactFlowProvider>
+      </div>
     </div>
   )
 }
