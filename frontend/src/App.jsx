@@ -80,7 +80,7 @@ export default function App() {
   const tabStyle = (t) => ({ padding: '4px 10px', fontSize: 13, fontWeight: tab === t ? 700 : 400, background: tab === t ? 'rgba(212,165,116,0.15)' : 'transparent', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 4, color: '#D4A574', cursor: 'pointer' })
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', height: '100vh', background: '#0A0806', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 14 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '3fr 7fr', height: '100vh', background: '#0A0806', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 14 }}>
       {/* ═══ Left Panel ═══ */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', height: '100vh', borderRight: '1px solid rgba(212,165,116,0.15)' }}>
         {/* 左上 50%：窗户可视化 */}
@@ -164,6 +164,6 @@ export default function App() {
   )
 }
 
-function Btn({label, onClick}) {
+function Btn({ label, onClick }) {
   return <button onClick={onClick} style={{ padding: '6px 12px', background: 'rgba(212,165,116,0.1)', border: '1px solid rgba(212,165,116,0.25)', borderRadius: 6, color: '#D4A574', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
 }

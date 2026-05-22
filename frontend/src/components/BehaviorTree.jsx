@@ -4,8 +4,8 @@ import 'reactflow/dist/style.css'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TYPE_LABELS = { Selector: 'SEL', Sequence: 'SEQ', Behaviour: 'ACT' }
-const NODE_SIZES = { Selector: { w: 140, h: 36 }, Sequence: { w: 130, h: 32 }, Behaviour: { w: 120, h: 28 } }
-const H_GAP = 20, V_GAP = 70
+const NODE_SIZES = { Selector: { w: 200, h: 44 }, Sequence: { w: 180, h: 40 }, Behaviour: { w: 160, h: 36 } }
+const H_GAP = 24, V_GAP = 80
 
 const STATUS_COLORS = {
   success: { border: '#34d399', bg: 'rgba(52,211,153,0.12)', shadow: '0 0 8px #34d399' },
@@ -107,10 +107,10 @@ function BTNodeComponent({ data }) {
       animation: isRunning ? 'btPulse 1.8s ease-in-out infinite' : 'none',
       transition: 'border-color 0.3s, box-shadow 0.3s, background 0.3s',
     }}>
-      <span style={{ fontSize: 10, color: '#e5e5e5', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+      <span style={{ fontSize: 13, color: '#e5e5e5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
         {label}
       </span>
-      <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#a3a3a3', fontFamily: 'monospace', flexShrink: 0 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#a3a3a3', fontFamily: 'monospace', flexShrink: 0 }}>
         {typeLabel}
       </span>
     </div>
