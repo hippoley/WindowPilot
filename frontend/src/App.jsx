@@ -6,13 +6,13 @@ const WS_URL = `ws://${window.location.hostname || 'localhost'}:8001/ws`
 
 export default function App() {
   const [connected, setConnected] = useState(false)
-  const [tick, setTick] = useState(0)
-  const [tm, setTm] = useState(null)
-  const [tree, setTree] = useState(null)
-  const [semantic, setSemantic] = useState({ tags: [] })
-  const [btBranch, setBtBranch] = useState('...')
-  const [log, setLog] = useState([])
+  const [state, setState] = useState({
+    tick: 0, tm: null, tree: null,
+    semantic: { tags: [] }, btBranch: '...', log: []
+  })
   const wsRef = useRef(null)
+  const rafRef = useRef(null)
+  const pendingRef = useRef(null)
 
   const send = useCallback((msg) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -21,24 +21,44 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    let ws
     let reconnectTimer
+    let disposed = false
+
     function connect() {
-      ws = new WebSocket(WS_URL)
+      if (disposed) return
+      const ws = new WebSocket(WS_URL)
       wsRef.current = ws
-      ws.onopen = () => setConnected(true)
-      ws.onclose = () => { setConnected(false); reconnectTimer = setTimeout(connect, 2000) }
+
+      ws.onopen = () => { if (!disposed) setConnected(true) }
+      ws.onclose = () => {
+        if (!disposed) {
+          setConnected(false)
+          reconnectTimer = setTimeout(connect, 2000)
+        }
+      }
       ws.onerror = () => ws.close()
       ws.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data)
           if (data.type === 'tick') {
-            setTick(data.tick)
-            setTm(data.thing_model)
-            setTree(data.tree)
-            setSemantic(data.semantic || { tags: [] })
-            setBtBranch(data.bt_branch || '...')
-            setLog(data.decision_log || [])
+            // Store latest data; only flush via rAF to throttle renders
+            pendingRef.current = {
+              tick: data.tick,
+              tm: data.thing_model,
+              tree: data.tree,
+              semantic: data.semantic || { tags: [] },
+              btBranch: data.bt_branch || '...',
+              log: data.decision_log || []
+            }
+            if (!rafRef.current) {
+              rafRef.current = requestAnimationFrame(() => {
+                rafRef.current = null
+                if (pendingRef.current) {
+                  setState(pendingRef.current)
+                  pendingRef.current = null
+                }
+              })
+            }
           }
         } catch (e) {
           console.error('[WS] Failed to parse message:', e)
@@ -46,10 +66,17 @@ export default function App() {
       }
     }
     connect()
-    return () => { clearTimeout(reconnectTimer); if (ws) ws.close() }
+
+    return () => {
+      disposed = true
+      clearTimeout(reconnectTimer)
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    }
   }, [])
 
-  // 从 thing_model 提取数据
+  // 从 consolidated state 提取数据
+  const { tick, tm, tree, semantic, btBranch, log } = state
   const win = tm?.window || {}
   const act = tm?.actuator || {}
   const scr = tm?.screen || {}
@@ -58,7 +85,7 @@ export default function App() {
   const card = tm?.ai?.card || null
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 320px', height: '100vh', background: '#100C06', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 12 }}>
+    <div className="app-grid" style={{ display: 'grid', height: '100vh', background: '#100C06', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 12 }}>
 
       {/* ═══ 左栏：传感器控制 ═══ */}
       <div style={{ borderRight: '1px solid rgba(212,165,116,0.15)', padding: 12, overflowY: 'auto' }}>
@@ -173,6 +200,7 @@ function Slider({ label, value, min, max, step, unit, onChange }) {
         <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#F5ECD7' }}>{value}{unit}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
+        aria-label={`${label} ${value}${unit}`}
         onChange={e => onChange(Number(e.target.value))}
         style={{ width: '100%', height: 3, accentColor: '#D4A574', cursor: 'pointer' }} />
     </div>
@@ -183,9 +211,15 @@ function Toggle({ label, active, onClick }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
       <span style={{ fontSize: 10, color: '#A89070' }}>{label}</span>
-      <div onClick={onClick} style={{ width: 32, height: 16, borderRadius: 8, background: active ? '#E07070' : '#2a1a0a', border: '1px solid rgba(212,165,116,0.2)', cursor: 'pointer', position: 'relative' }}>
+      <button
+        role="switch"
+        aria-checked={!!active}
+        aria-label={label}
+        onClick={onClick}
+        style={{ width: 32, height: 16, borderRadius: 8, background: active ? '#E07070' : '#2a1a0a', border: '1px solid rgba(212,165,116,0.2)', cursor: 'pointer', position: 'relative', padding: 0 }}
+      >
         <div style={{ width: 12, height: 12, borderRadius: 6, background: '#F5ECD7', position: 'absolute', top: 1, left: active ? 17 : 1, transition: 'left 0.2s' }} />
-      </div>
+      </button>
     </div>
   )
 }

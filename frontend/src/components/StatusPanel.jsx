@@ -1,11 +1,29 @@
 // 右侧状态面板 — Andluca 设计语言
-export default function StatusPanel({ window_, sensors }) {
-  const pos = window_.position ?? 0
-  const status = window_.status ?? 'closed'
-  const statusText = {
+export default function StatusPanel({ tm, semantic, btBranch }) {
+  const openPct = tm?.window?.open_pct ?? 0
+  const windowState = tm?.window?.state ?? 'closed'
+  const actuatorState = tm?.actuator?.state ?? 'idle'
+  const sensors = tm?.sensors ?? {}
+  const risk = semantic?.risk ?? 'safe'
+
+  const stateText = {
     closed: '已关闭', opening: '开启中', open: '已开启',
-    closing: '关闭中', stopped: '紧急停止', error: '故障',
-  }[status] || status
+    closing: '关闭中', stopped: '已停止', error: '故障',
+    partial: '半开',
+  }[windowState] || windowState
+
+  const motorText = {
+    idle: '电机待机', extending: '电机伸出中', retracting: '电机缩回中',
+    holding: '电机保持', stalled: '⚠ 电机堵转',
+  }[actuatorState] || actuatorState
+
+  const motorRunning = actuatorState !== 'idle'
+
+  const riskStyle = {
+    safe: { color: '#6fcf97', label: '安全' },
+    caution: { color: '#f2c94c', label: '注意' },
+    danger: { color: '#eb5757', label: '危险' },
+  }[risk] || { color: '#aaa', label: risk }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -14,27 +32,33 @@ export default function StatusPanel({ window_, sensors }) {
       {/* 主状态卡 */}
       <div className="status-card">
         <div className="status-label-sm">当前开窗比例</div>
-        <div className="status-pct">{Math.round(pos * 100)}%</div>
+        <div className="status-pct">{Math.round(openPct)}%</div>
         <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${pos * 100}%` }} />
+          <div className="progress-fill" style={{ width: `${openPct}%` }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className={`status-badge badge-${status}`}>{statusText}</span>
+          <span className={`status-badge badge-${windowState}`}>{stateText}</span>
           <div className="motor-row">
-            <div className={`motor-dot ${window_.motor_running ? 'running' : ''}`} />
-            {window_.motor_running ? '电机运行中' : '电机待机'}
+            <div className={`motor-dot ${motorRunning ? 'running' : ''}`} />
+            {motorText}
           </div>
         </div>
       </div>
 
-      {/* 当前决策 */}
+      {/* 当前决策 & 风险 */}
       <div className="glass-card">
         <div className="panel-label" style={{ marginBottom: 6 }}>当前决策</div>
-        <div className="decision-scenario">{window_.active_scenario || '待机'}</div>
-        <div className="decision-box">{window_.decision_reason || '系统初始化'}</div>
-        {window_.target_position != null && Math.abs(window_.target_position - pos) > 0.02 && (
+        <div className="decision-scenario">{btBranch || '待机'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          <span style={{
+            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+            background: riskStyle.color,
+          }} />
+          <span style={{ fontSize: 12, color: riskStyle.color }}>{riskStyle.label}</span>
+        </div>
+        {semantic?.summary && (
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-            目标 → {Math.round(window_.target_position * 100)}%
+            {semantic.summary}
           </div>
         )}
       </div>
@@ -43,12 +67,12 @@ export default function StatusPanel({ window_, sensors }) {
       <div className="glass-card">
         <div className="panel-label" style={{ marginBottom: 6 }}>传感器摘要</div>
         {[
-          { icon: '🌧️', label: '降雨', value: sensors.rain ? '⚠ 检测到' : '正常', alert: sensors.rain },
-          { icon: '🌬️', label: 'CO₂', value: `${(sensors.co2_ppm ?? 400).toFixed(0)} ppm`, alert: sensors.co2_ppm >= 800 },
-          { icon: '💨', label: '风速', value: `${(sensors.wind_speed ?? 0).toFixed(1)} m/s`, alert: sensors.wind_speed >= 10 },
-          { icon: '🌡️', label: '温度', value: `${(sensors.temperature ?? 22).toFixed(1)}°C`, alert: sensors.temperature >= 35 },
-          { icon: '🤚', label: '夹手', value: sensors.motor_blocked ? '⚠ 异常' : '正常', alert: sensors.motor_blocked },
-          { icon: '🔥', label: '过热', value: sensors.motor_overheat ? '⚠ 过热' : '正常', alert: sensors.motor_overheat },
+          { icon: '🌧️', label: '降雨', value: sensors.rain ? '⚠ 检测到' : '正常', alert: !!sensors.rain },
+          { icon: '🌬️', label: 'CO₂', value: `${(sensors.co2_ppm ?? 400).toFixed(0)} ppm`, alert: (sensors.co2_ppm ?? 0) >= 800 },
+          { icon: '💨', label: '风速', value: `${(sensors.wind_speed ?? 0).toFixed(1)} m/s (Lv${sensors.wind_level ?? 0})`, alert: (sensors.wind_speed ?? 0) >= 10 },
+          { icon: '🌡️', label: '室内温度', value: `${(sensors.temp_indoor ?? 22).toFixed(1)}°C`, alert: (sensors.temp_indoor ?? 22) >= 35 },
+          { icon: '💧', label: '湿度', value: `${(sensors.humidity ?? 50).toFixed(0)}%`, alert: (sensors.humidity ?? 50) >= 80 },
+          { icon: '🏭', label: 'AQI', value: `${(sensors.aqi ?? 50).toFixed(0)}`, alert: (sensors.aqi ?? 0) >= 150 },
         ].map(r => (
           <div key={r.label} className="sensor-summary-row">
             <span className="sensor-summary-label">{r.icon} {r.label}</span>

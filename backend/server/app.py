@@ -7,6 +7,7 @@ import logging
 import time
 import traceback
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Set
 
@@ -15,7 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Ensure parent dir is on sys.path for flat package imports (intentional)
+_backend_dir = str(Path(__file__).parent.parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 
 from domain.thing_model import ThingModel
 from domain.capability import DeviceCapability
@@ -33,9 +37,20 @@ from ai.learner import HabitLearner
 from ai.recommender import RuleFallback
 
 
+# ═══ Lifespan ═══
+
+@asynccontextmanager
+async def lifespan(app):
+    # Startup: launch the tick loop
+    task = asyncio.create_task(tick_loop())
+    yield
+    # Shutdown: cancel the background tick loop
+    task.cancel()
+
+
 # ═══ 初始化 ═══
 
-app = FastAPI(title="WindowPilot API v3")
+app = FastAPI(title="WindowPilot API v3", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # 领域对象
@@ -353,12 +368,7 @@ async def _load_scenario(name: str):
         tm.actuator_state = "holding"; tm.screen_position_pct = 100.0
 
 
-# ═══ Startup ═══
-
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(tick_loop())
-
+# ═══ HTTP Routes ═══
 
 @app.get("/health")
 def health():

@@ -1,1 +1,13 @@
 /* minimal */
+
+.app-grid {
+    grid-template-columns: 280px 1fr 320px;
+}
+
+@media (max-width: 899px) {
+    .app-grid {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto;
+        overflow-y: auto;
+    }
+}
