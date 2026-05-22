@@ -1,0 +1,79 @@
+# 行为树结构声明式配置
+# 当前由 tree_builder.py 硬编码构建，此文件作为文档和未来配置化的基础
+tree:
+  name: WindowPilot
+  type: selector
+  memory: false
+  children:
+    - name: "P0 紧急保护"
+      type: selector
+      priority: 0
+      local_only: true
+      children:
+        - {name: "遇阻保护", type: sequence, conditions: [IsObstacle], actions: [ActStopReverse, ActLogObstacle]}
+        - {name: "过热保护", type: sequence, conditions: [IsMotorOverheat], actions: [ActStopAll, ActLogOverheat]}
+        - {name: "堵转保护", type: sequence, conditions: [IsStalled], actions: [ActStopAll]}
+
+    - name: "P1 传感器安全"
+      type: selector
+      priority: 1
+      local_only: true
+      children:
+        - {name: "雨天关窗", type: sequence, conditions: [IsRainDetected, IsWindowOpen], actions: [ActCloseWindow, ActLogRain]}
+        - {name: "VOC关窗", type: sequence, conditions: [IsVOCSpike], actions: [ActCloseWindow, ActLogVOC]}
+
+    - name: "P2 天气预报"
+      type: selector
+      priority: 2
+      local_only: true
+      children:
+        - {name: "强风关窗", type: sequence, conditions: [IsStormWind], actions: [ActCloseWindow, ActLogWind]}
+        - {name: "AQI关窗", type: sequence, conditions: [IsAQIDangerous], actions: [ActCloseWindow, ActLogAQI]}
+        - {name: "极端湿度", type: sequence, conditions: [IsHumidityExtreme], actions: [ActCloseWindow]}
+
+    - name: "P3 设备前置"
+      type: selector
+      priority: 3
+      children:
+        - {name: "窗纱干涉检查", type: sequence, conditions: [IsScreenInterference], actions: [ActEnsureScreenDown]}
+        - {name: "设备未就绪", type: sequence, conditions: [IsDeviceNotReady], actions: [ActWaitDevice]}
+
+    - name: "P4 用户控制"
+      type: selector
+      priority: 4
+      children:
+        - {name: "尊重用户意图", type: sequence, conditions: [IsUserRecentManual], actions: [ActRespectUser]}
+        - {name: "执行指令", type: sequence, conditions: [HasUserCommand, NoStormWarning, NoRain, NoObstacle], actions: [ActExecuteUser]}
+
+    - name: "P5 环境自动"
+      type: selector
+      priority: 5
+      requires_cloud: false
+      children:
+        - {name: "CO₂通风", type: sequence, conditions: [IsCO2High, IsModeAuto, NoRain, NoExistingRec], actions: [ActGenRec]}
+        - {name: "除湿通风", type: sequence, conditions: [IsHumidityHigh, IsModeAuto, NoExistingRec], actions: [ActGenRec]}
+        - {name: "自然降温", type: sequence, conditions: [IsIndoorHot, IsModeAuto, NoExistingRec], actions: [ActGenRec]}
+        - {name: "书房降噪", type: sequence, conditions: [IsNoisyStudy, IsModeAuto, NoExistingRec], actions: [ActGenRec]}
+        - {name: "无人节能", type: sequence, conditions: [IsHumanAbsent, IsModeAuto], actions: [ActCloseNoHuman]}
+
+    - name: "P6 房间策略"
+      type: selector
+      priority: 6
+      children:
+        - {name: "老人房防寒", type: sequence, conditions: [IsElderlyRoomCold], actions: [ActCloseWindow]}
+        - {name: "儿童房超限关窗", type: sequence, conditions: [IsChildRoomAutoLimit], actions: [ActCloseWindow]}
+        - {name: "儿童房纱窗放下", type: sequence, conditions: [IsChildRoomScreenUp], actions: [ActEnforceScreenDown]}
+        - {name: "卧室夜间限速", type: sequence, conditions: [IsBedroomNight], actions: [ActLimitNightOpen]}
+        - {name: "书房噪声关窗", type: sequence, conditions: [IsNoisyStudyOpen], actions: [ActCloseWindow]}
+        - {name: "西晒遮光", type: sequence, conditions: [IsWestSunGlare, IsScreenUp], actions: [ActLowerScreenSun]}
+
+    - name: "P7 AI推荐"
+      type: sequence
+      priority: 7
+      requires_cloud: true
+      children:
+        - {conditions: [HasAIRecommendation], actions: [ActShowRec]}
+
+    - name: "待机"
+      type: action
+      action: ActIdle

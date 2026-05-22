@@ -1,16 +1,13 @@
 """
-WindowPilot 服务层 — FastAPI + WebSocket + Tick Loop
+WindowPilot 服务层 — FastAPI + WebSocket + Agent Orchestrator
 
-架构（借鉴 Marvis 多 Agent 分层思路）：
+架构：5 Agent 协作
 ┌─────────────────────────────────────────────────────┐
-│  Safety Loop (500ms, 本地, 零网络依赖)              │
-│  simulate → snapshot → BT.tick_once → broadcast     │
-└──────────────────────────┬──────────────────────────┘
-                           │ 触发信号: P5.NeedGenerate
-┌──────────────────────────▼──────────────────────────┐
-│  AI Pipeline (异步, 可降级, 不阻塞安全循环)         │
-│  goal_inference → retrieve → rank → explain         │
-│  完成后写回 tm.ai_recommendation                    │
+│  ExecutionAgent  → 物理仿真 (推窗器/纱窗)          │
+│  EnvironmentAgent → 语义快照生成                    │
+│  SafetyAgent     → 行为树 tick (P0-P7)             │
+│  RecommendAgent  → 异步 AI 推荐管线                │
+│  LearnerAgent    → 习惯学习 & 记忆衰减             │
 └─────────────────────────────────────────────────────┘
 """
 import asyncio
@@ -36,15 +33,13 @@ from domain.thing_model import ThingModel
 from domain.capability import DeviceCapability
 from domain.context_snapshot import ContextSnapshot
 from domain.decision_trace import DecisionTraceLog
-from engine.tree_builder import build_tree
-from execution.simulator import simulate_actuator, simulate_screen, WindowScreenCoordinator
+from agents import SafetyAgent, EnvironmentAgent, RecommendAgent, ExecutionAgent, LearnerAgent
 from ai.client import MiniMaxClient
 from ai.intent import IntentParser
 from ai.goal_inference import GoalInference
 from ai.retriever import SceneRetriever
 from ai.ranker import CandidateRanker
 from ai.explainer import Explainer
-from ai.learner import HabitLearner
 from ai.recommender import RuleFallback
 
 logger = logging.getLogger("windowpilot")
@@ -68,7 +63,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 tm = ThingModel()
 cap = DeviceCapability.from_yaml()
 trace = DecisionTraceLog()
-coordinator = WindowScreenCoordinator(cap)
 
 # AI 模块（各自可降级）
 try:
@@ -81,8 +75,16 @@ ai_goal      = GoalInference(ai_client)
 ai_retriever = SceneRetriever(ai_client) if ai_client else None
 ai_ranker    = CandidateRanker()
 ai_explainer = Explainer(ai_client) if ai_client else None
-ai_learner   = HabitLearner()
 rule_fallback = RuleFallback()
+
+# ═══ 5 Agents ═══
+execution_agent = ExecutionAgent(cap)
+env_agent = EnvironmentAgent(cap)
+safety_agent = SafetyAgent(cap, trace)
+recommend_agent = RecommendAgent()
+learner_agent = LearnerAgent()
+
+ALL_AGENTS = [execution_agent, env_agent, safety_agent, recommend_agent, learner_agent]
 
 # 传感器白名单
 ALLOWED_SENSOR_KEYS = {
@@ -96,24 +98,9 @@ ALLOWED_SENSOR_KEYS = {
 connected: Set[WebSocket] = set()
 tick_count = 0
 
-# 行为树单例
-_bt_tree = None
-
 # AI 异步任务状态
 _ai_task: asyncio.Task = None
 _ai_running = False
-
-
-def _get_tree():
-    global _bt_tree
-    if _bt_tree is None:
-        _bt_tree = build_tree(tm, cap, trace)
-    return _bt_tree
-
-
-def _reset_tree():
-    global _bt_tree
-    _bt_tree = None
 
 
 # ═══ AI Pipeline（异步，不阻塞安全循环）═══
@@ -122,20 +109,17 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
     """
     异步 AI 推荐链路。
     在独立 task 中运行，完成后写回 tm.ai_recommendation。
-    即使耗时 5 秒也不影响 500ms 安全 tick。
     """
     global _ai_running
     _ai_running = True
     t0 = time.time()
 
     try:
-        # AI-2: 目标推理
         goal = ai_goal.infer(tm, snapshot)
         trace.record(tm, "AI-2.Goal",
                      f"{goal.get('primary_goal', '?')} conflict={goal.get('conflict', 'none')}",
                      "success")
 
-        # AI-3: 场景检索（可并行化，当前串行足够）
         candidates = []
         if ai_retriever:
             candidates = await asyncio.to_thread(ai_retriever.retrieve, snapshot, cap)
@@ -148,7 +132,6 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
             trace.record(tm, "AI.Pipeline", "no_candidates", "failure")
             return
 
-        # AI-3: 排序
         ranked = ai_ranker.rank(candidates, tm, snapshot, cap)
         if not ranked:
             return
@@ -176,11 +159,10 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
         best["needs_confirm"] = best.get("needs_confirm", True)
 
         # AI-5: 偏好微调
-        preferred = ai_learner.get_preferred_pct(tm.room_type, tm.time_hour)
-        if ai_learner.get_confidence() > 0.3:
+        preferred = learner_agent.get_preferred_pct(tm.room_type, tm.time_hour)
+        if learner_agent.learner.get_confidence() > 0.3:
             best["window_pct"] = int((best.get("window_pct", 30) + preferred) / 2)
 
-        # 写回结果
         tm.ai_recommendation = best
         elapsed = (time.time() - t0) * 1000
         trace.record(tm, "AI.Pipeline",
@@ -195,12 +177,12 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
         _ai_running = False
 
 
-# ═══ Safety Tick Loop（500ms 严格节拍，纯本地）═══
+# ═══ Safety Tick Loop（500ms 严格节拍）═══
 
 async def tick_loop():
     """
-    主安全循环：每 500ms 执行一次。
-    只做本地计算（仿真 + 行为树），绝不等待网络。
+    主循环：每 500ms 执行一次。
+    编排 5 个 Agent，只做本地计算，绝不等待网络。
     AI 链路通过 asyncio.create_task 异步触发。
     """
     global tick_count, _ai_task
@@ -210,34 +192,28 @@ async def tick_loop():
             tick_count += 1
             tm.bt_tick = tick_count
 
-            # ── 本地安全层（零延迟）──
-            # 1. 仿真执行器
-            simulate_actuator(tm, cap)
-            simulate_screen(tm)
-            coordinator.tick(tm)
+            # 1. 物理执行仿真
+            execution_agent.safe_tick(tm, None)
 
-            # 2. 语义快照
-            snapshot = ContextSnapshot.from_thing_model(tm, cap)
+            # 2. 环境感知 → 语义快照
+            env_agent.safe_tick(tm, None)
+            snapshot = env_agent.snapshot
 
-            # 3. 行为树 tick（纯本地规则判断）
-            tree = _get_tree()
-            tree.tick_once()
+            # 3. 行为树安全决策
+            safety_agent.safe_tick(tm, snapshot)
 
-            # ── 异步 AI 层（不阻塞）──
-            # 4. 如果行为树标记需要 AI 推荐，且当前没有 AI 任务在跑
+            # 4. 异步 AI 推荐（不阻塞）
             if (tm.bt_active_branch == "P5.NeedGenerate"
                     and tm.ai_recommendation is None
                     and not _ai_running):
                 _ai_task = asyncio.create_task(_run_ai_pipeline(snapshot))
 
-            # 5. 到位后清除用户指令
-            if tm.user_command and tm.user_command.get("action") == "open_to":
-                target = tm.user_command.get("target_pct", 0)
-                if tm.actuator_state in ("idle", "holding") and abs(tm.window_open_pct - target) < 3:
-                    tm.user_command = None
+            # 5. 习惯学习（定期衰减）
+            learner_agent.safe_tick(tm, snapshot)
 
             # 6. 广播
-            tree_snapshot = _build_tree_snapshot(tree)
+            tree_snapshot = _build_tree_snapshot(safety_agent._get_tree(tm))
+            agents_status = {a.name: a.to_dict() for a in ALL_AGENTS}
             payload = {
                 "type": "tick",
                 "tick": tick_count,
@@ -252,6 +228,7 @@ async def tick_loop():
                 "decision_log": trace.recent(10),
                 "bt_branch": tm.bt_active_branch,
                 "ai_status": "running" if _ai_running else "idle",
+                "agents_status": agents_status,
             }
             await _broadcast(payload)
 
@@ -341,9 +318,9 @@ async def handle_command(msg: dict):
         if tm.recommendation_card:
             target = tm.recommendation_card.get("window_pct", 0)
             screen = tm.recommendation_card.get("screen_pct", 100)
-            ai_learner.on_accept(tm.recommendation_card, tm.room_type, tm.time_hour)
-            coordinator.request_screen(tm, screen)
-            coordinator.request_open_window(tm, target)
+            learner_agent.on_accept(tm.recommendation_card, tm.room_type, tm.time_hour)
+            execution_agent.coordinator.request_screen(tm, screen)
+            execution_agent.coordinator.request_open_window(tm, target)
             tm.user_command = {"source": "ai_confirmed", "action": "open_to", "target_pct": target}
             trace.record(tm, "User.Accept", f"confirmed_{target}%", "success")
             tm.ai_recommendation = None
@@ -351,7 +328,7 @@ async def handle_command(msg: dict):
 
     elif cmd == "reject_recommendation":
         if tm.recommendation_card:
-            ai_learner.on_reject(tm.recommendation_card, tm.room_type, tm.time_hour)
+            learner_agent.on_reject(tm.recommendation_card, tm.room_type, tm.time_hour)
         tm.ai_recommendation = None
         tm.recommendation_card = None
         trace.record(tm, "User.Reject", "rejected", "success")
@@ -396,7 +373,7 @@ async def handle_command(msg: dict):
 def _reset():
     global _ai_running
     tm.__init__()
-    _reset_tree()
+    safety_agent.reset_tree()
     _ai_running = False
 
 
@@ -445,6 +422,12 @@ def health():
         "branch": tm.bt_active_branch,
         "ai_status": "running" if _ai_running else "idle",
     }
+
+
+@app.get("/agents")
+def agents_endpoint():
+    """返回所有 Agent 状态"""
+    return {a.name: a.to_dict() for a in ALL_AGENTS}
 
 
 @app.get("/", response_class=HTMLResponse)
