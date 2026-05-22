@@ -77,56 +77,61 @@ export default function App() {
     } catch (e) { alert('JSON 解析失败') }
   }
 
-  const tabStyle = (t) => ({ padding: '4px 10px', fontSize: 10, fontWeight: tab === t ? 700 : 400, background: tab === t ? 'rgba(212,165,116,0.15)' : 'transparent', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 4, color: '#D4A574', cursor: 'pointer' })
+  const tabStyle = (t) => ({ padding: '4px 10px', fontSize: 13, fontWeight: tab === t ? 700 : 400, background: tab === t ? 'rgba(212,165,116,0.15)' : 'transparent', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 4, color: '#D4A574', cursor: 'pointer' })
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', height: '100vh', background: '#0A0806', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', height: '100vh', background: '#0A0806', color: '#F5ECD7', fontFamily: 'Inter,sans-serif', fontSize: 14 }}>
       {/* ═══ Left Panel ═══ */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, overflowY: 'auto', borderRight: '1px solid rgba(212,165,116,0.15)' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', height: 180 }}>
+      <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', height: '100vh', borderRight: '1px solid rgba(212,165,116,0.15)' }}>
+        {/* 左上 50%：窗户可视化 */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16, borderBottom: '1px solid rgba(212,165,116,0.1)' }}>
           <WindowSVG openPct={win.open_pct || 0} screenPct={scr.position_pct || 0} state={win.state || 'closed'} motion={win.motion || 'stopped'} actuatorState={act.state || 'idle'} rain={!!sens.rain} wind={sens.wind_speed || 0} alarm={!!sec.alarm} />
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#A89070' }}>
-          <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: '#D4A574' }}>{Math.round(win.open_pct || 0)}%</span>
-          {' '}{win.state || 'closed'} | {act.state || 'idle'}
-          <span style={{ marginLeft: 8, fontSize: 9, color: connected ? '#7EC8A0' : '#E07070' }}>{connected ? '●' : '○'}</span>
-        </div>
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button style={tabStyle('scenes')} onClick={() => switchTab('scenes')}>场景注入</button>
-          <button style={tabStyle('json')} onClick={() => switchTab('json')}>JSON编辑</button>
-          <button style={tabStyle('manual')} onClick={() => switchTab('manual')}>人工干预</button>
-        </div>
-        {/* Tab content */}
-        {tab === 'scenes' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
-            {SCENES.map(s => (
-              <button key={s.id} onClick={() => applyScene(s)} style={{ padding: '10px 4px', background: 'rgba(212,165,116,0.06)', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 8, color: '#D4A574', cursor: 'pointer', textAlign: 'center', fontSize: 10 }}>
-                <div style={{ fontSize: 20 }}>{s.icon}</div>
-                <div style={{ marginTop: 2 }}>{s.name}</div>
-              </button>
-            ))}
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 14, color: '#A89070' }}>
+            <span style={{ fontSize: 36, fontWeight: 800, fontFamily: 'monospace', color: '#D4A574' }}>{Math.round(win.open_pct || 0)}%</span>
+            <span style={{ marginLeft: 12, fontSize: 14 }}>{win.state || 'closed'}</span>
+            <span style={{ marginLeft: 12, fontSize: 12, color: connected ? '#7EC8A0' : '#E07070' }}>{connected ? '● 已连接' : '○ 断开'}</span>
           </div>
-        )}
-        {tab === 'json' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <textarea value={jsonText} onChange={e => setJsonText(e.target.value)} style={{ width: '100%', height: 180, background: '#1a1408', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 6, color: '#F5ECD7', fontFamily: 'monospace', fontSize: 10, padding: 8, resize: 'vertical' }} />
-            <button onClick={injectJson} style={{ alignSelf: 'flex-start', padding: '6px 16px', background: 'rgba(212,165,116,0.15)', border: '1px solid rgba(212,165,116,0.3)', borderRadius: 6, color: '#D4A574', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>注入</button>
+          {sec.alarm && <div style={{ marginTop: 8, padding: '6px 14px', borderRadius: 6, fontSize: 14, fontWeight: 700, background: 'rgba(224,112,112,0.15)', color: '#E07070' }}>🚨 安防报警</div>}
+        </div>
+        {/* 左下 50%：输入面板 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, overflowY: 'auto' }}>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={tabStyle('scenes')} onClick={() => switchTab('scenes')}>场景注入</button>
+            <button style={tabStyle('json')} onClick={() => switchTab('json')}>JSON编辑</button>
+            <button style={tabStyle('manual')} onClick={() => switchTab('manual')}>人工干预</button>
           </div>
-        )}
-        {tab === 'manual' && (
-          <div style={{ opacity: 0.6 }}>
-            <div style={{ fontSize: 9, color: '#5C4A35', marginBottom: 6 }}>⚠️ 人工干预（调试用）</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Btn label="开50%" onClick={() => send({ cmd: 'user_open_to', value: 50 })} />
-              <Btn label="全开" onClick={() => send({ cmd: 'user_open_to', value: 100 })} />
-              <Btn label="停止" onClick={() => send({ cmd: 'user_stop' })} />
-              <Btn label="关窗" onClick={() => send({ cmd: 'user_open_to', value: 0 })} />
-              <Btn label="布防" onClick={() => send({ cmd: 'arm_security' })} />
-              <Btn label="撤防" onClick={() => send({ cmd: 'disarm_security' })} />
+          {/* Tab content */}
+          {tab === 'scenes' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+              {SCENES.map(s => (
+                <button key={s.id} onClick={() => applyScene(s)} style={{ padding: '10px 4px', background: 'rgba(212,165,116,0.06)', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 8, color: '#D4A574', cursor: 'pointer', textAlign: 'center', fontSize: 13 }}>
+                  <div style={{ fontSize: 20 }}>{s.icon}</div>
+                  <div style={{ marginTop: 2 }}>{s.name}</div>
+                </button>
+              ))}
             </div>
-          </div>
-        )}
+          )}
+          {tab === 'json' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <textarea value={jsonText} onChange={e => setJsonText(e.target.value)} style={{ width: '100%', height: 180, background: '#1a1408', border: '1px solid rgba(212,165,116,0.2)', borderRadius: 6, color: '#F5ECD7', fontFamily: 'monospace', fontSize: 12, padding: 8, resize: 'vertical' }} />
+              <button onClick={injectJson} style={{ alignSelf: 'flex-start', padding: '6px 16px', background: 'rgba(212,165,116,0.15)', border: '1px solid rgba(212,165,116,0.3)', borderRadius: 6, color: '#D4A574', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>注入</button>
+            </div>
+          )}
+          {tab === 'manual' && (
+            <div style={{ opacity: 0.6 }}>
+              <div style={{ fontSize: 12, color: '#5C4A35', marginBottom: 6 }}>⚠️ 人工干预（调试用）</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Btn label="开50%" onClick={() => send({ cmd: 'user_open_to', value: 50 })} />
+                <Btn label="全开" onClick={() => send({ cmd: 'user_open_to', value: 100 })} />
+                <Btn label="停止" onClick={() => send({ cmd: 'user_stop' })} />
+                <Btn label="关窗" onClick={() => send({ cmd: 'user_open_to', value: 0 })} />
+                <Btn label="布防" onClick={() => send({ cmd: 'arm_security' })} />
+                <Btn label="撤防" onClick={() => send({ cmd: 'disarm_security' })} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ═══ Right Panel ═══ */}
@@ -136,29 +141,29 @@ export default function App() {
         </div>
         {log.length > 0 && (
           <div style={{ padding: 8, background: 'rgba(212,165,116,0.05)', borderRadius: 6, border: '1px solid rgba(212,165,116,0.12)' }}>
-            <div style={{ fontWeight: 700, fontSize: 10, color: '#D4A574', marginBottom: 4 }}>决策解释</div>
-            <div style={{ fontSize: 10, color: '#F5ECD7' }}>当前分支: {btBranch}</div>
-            <div style={{ fontSize: 10, color: '#A89070' }}>原因: {log[0]?.branch} → {log[0]?.action}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#D4A574', marginBottom: 4 }}>决策解释</div>
+            <div style={{ fontSize: 13, color: '#F5ECD7' }}>当前分支: {btBranch}</div>
+            <div style={{ fontSize: 13, color: '#A89070' }}>原因: {log[0]?.branch} → {log[0]?.action}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: 9, fontWeight: 700, color: '#5C4A35', marginBottom: 4 }}>EVENT TIMELINE</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#5C4A35', marginBottom: 4 }}>EVENT TIMELINE</div>
           {log.slice(0, 5).map((e, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
               <div style={{ width: 6, height: 6, borderRadius: 3, background: '#D4A574', marginTop: 4 }} />
               <div>
-                <div style={{ fontSize: 10, color: '#D4A574' }}>#{e.tick} {e.branch}</div>
-                <div style={{ fontSize: 9, color: '#A89070' }}>{e.action}</div>
+                <div style={{ fontSize: 12, color: '#D4A574' }}>#{e.tick} {e.branch}</div>
+                <div style={{ fontSize: 12, color: '#A89070' }}>{e.action}</div>
               </div>
             </div>
           ))}
-          {log.length === 0 && <div style={{ fontSize: 9, color: '#5C4A35' }}>暂无事件...</div>}
+          {log.length === 0 && <div style={{ fontSize: 12, color: '#5C4A35' }}>暂无事件...</div>}
         </div>
       </div>
     </div>
   )
 }
 
-function Btn({ label, onClick }) {
-  return <button onClick={onClick} style={{ padding: '6px 12px', background: 'rgba(212,165,116,0.1)', border: '1px solid rgba(212,165,116,0.25)', borderRadius: 6, color: '#D4A574', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
+function Btn({label, onClick}) {
+  return <button onClick={onClick} style={{ padding: '6px 12px', background: 'rgba(212,165,116,0.1)', border: '1px solid rgba(212,165,116,0.25)', borderRadius: 6, color: '#D4A574', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
 }
