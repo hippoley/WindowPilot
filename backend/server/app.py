@@ -33,7 +33,8 @@ from domain.thing_model import ThingModel
 from domain.capability import DeviceCapability
 from domain.context_snapshot import ContextSnapshot
 from domain.decision_trace import DecisionTraceLog
-from agents import SafetyAgent, EnvironmentAgent, RecommendAgent, ExecutionAgent, LearnerAgent, SecurityAgent
+from agents import SafetyAgent, EnvironmentAgent, RecommendAgent, ExecutionAgent, LearnerAgent, SecurityAgent, SchedulerAgent
+from agents.scheduler_agent import ScheduleEntry
 from ai.client import MiniMaxClient
 from ai.intent import IntentParser
 from ai.goal_inference import GoalInference
@@ -77,15 +78,16 @@ ai_ranker    = CandidateRanker()
 ai_explainer = Explainer(ai_client) if ai_client else None
 rule_fallback = RuleFallback()
 
-# ═══ 6 Agents ═══
+# ═══ 7 Agents ═══
 execution_agent = ExecutionAgent(cap)
 env_agent = EnvironmentAgent(cap)
 safety_agent = SafetyAgent(cap, trace)
 security_agent = SecurityAgent(trace)
 recommend_agent = RecommendAgent()
 learner_agent = LearnerAgent()
+scheduler_agent = SchedulerAgent(trace)
 
-ALL_AGENTS = [execution_agent, env_agent, safety_agent, security_agent, recommend_agent, learner_agent]
+ALL_AGENTS = [execution_agent, env_agent, safety_agent, security_agent, recommend_agent, learner_agent, scheduler_agent]
 
 # 传感器白名单
 ALLOWED_SENSOR_KEYS = {
@@ -214,6 +216,9 @@ async def tick_loop():
 
             # 5. 习惯学习（定期衰减）
             learner_agent.safe_tick(tm, snapshot)
+
+            # 5.5 定时场景
+            scheduler_agent.safe_tick(tm, snapshot)
 
             # 6. 广播
             tree_snapshot = _build_tree_snapshot(safety_agent._get_tree(tm))
@@ -364,6 +369,27 @@ async def handle_command(msg: dict):
             else:
                 trace.record(tm, "AI-1.Intent", f"'{text}' → unknown", "failure")
 
+    elif cmd == "add_schedule":
+        if isinstance(value, dict):
+            entry = ScheduleEntry(
+                id=value.get("id", f"custom_{int(time.time())}"),
+                name=value.get("name", "自定义定时"),
+                hour=int(value.get("hour", 0)),
+                minute=int(value.get("minute", 0)),
+                weekdays=value.get("weekdays", [0,1,2,3,4,5,6]),
+                action=value.get("action", "open_to"),
+                target_pct=float(value.get("target_pct", 30)),
+                screen_pct=value.get("screen_pct"),
+                enabled=value.get("enabled", True),
+                room_type=value.get("room_type"),
+            )
+            scheduler_agent.add_schedule(entry)
+            trace.record(tm, "Scheduler.Add", f"{entry.name} @{entry.hour}:{entry.minute:02d}", "success")
+
+    elif cmd == "remove_schedule":
+        scheduler_agent.remove_schedule(str(value))
+        trace.record(tm, "Scheduler.Remove", f"id={value}", "success")
+
     elif cmd == "arm_security":
         security_agent.arm(tm)
 
@@ -438,6 +464,12 @@ def health():
 def agents_endpoint():
     """返回所有 Agent 状态"""
     return {a.name: a.to_dict() for a in ALL_AGENTS}
+
+
+@app.get("/schedules")
+def get_schedules():
+    """返回所有定时任务"""
+    return scheduler_agent.list_schedules()
 
 
 @app.get("/", response_class=HTMLResponse)
