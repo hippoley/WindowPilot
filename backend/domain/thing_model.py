@@ -54,6 +54,7 @@ class ThingModel:
     wind_speed_ms: float = 0.0
     wind_level: int = 0
     wind_ts: float = 0.0
+    wind_direction: str = ""              # N/S/E/W/NE/NW/SE/SW（风向，风从哪里来）
 
     lux: float = 0.0                      # 光照强度（勒克斯）
     lux_ts: float = 0.0
@@ -77,6 +78,12 @@ class ThingModel:
     # ── 设备配置/状态 ──
     room_type: str = "bedroom"
     orientation: str = "S"                # 窗朝向：N/S/E/W/NE/NW/SE/SW
+
+    # ── 用户画像 ──
+    user_profile: str = "default"         # default/allergy/pet_owner/has_baby/elderly_solo/smoker
+    has_pets: bool = False                 # 养宠物（猫/狗防坠落）
+    has_allergy: bool = False             # 过敏体质（花粉/粉尘敏感）
+
     time_hour: int = 12
     mode: str = "ventilation_first"       # ventilation_first/wind_protect/safety_first
     calibrated: bool = True
@@ -160,6 +167,9 @@ class ThingModel:
                 "time_hour": self.time_hour,
                 "mode": self.mode,
                 "calibrated": self.calibrated,
+                "user_profile": self.user_profile,
+                "has_pets": self.has_pets,
+                "has_allergy": self.has_allergy,
             },
             "control": {
                 "user_command": self.user_command,

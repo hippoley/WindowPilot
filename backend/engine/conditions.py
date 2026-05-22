@@ -48,6 +48,32 @@ IsRainDetected = _cond("雨水检测?",
 IsVOCSpike     = _cond("VOC突变?",
     lambda tm, _: tm.voc_mg >= float(p1["voc_threshold_mg"]) and tm.is_sensor_fresh(tm.voc_ts))
 
+
+def _wind_faces_window(wind_dir: str, window_orient: str) -> bool:
+    """判断风是否正对窗户（风向与窗朝向相同方向 = 风吹向窗户）"""
+    if not wind_dir or not window_orient:
+        return False
+    # 风向表示风从哪里来，如果风从南来(S)，窗朝南(S)，则风正对窗户
+    facing_map = {
+        "N": {"N", "NE", "NW"},
+        "S": {"S", "SE", "SW"},
+        "E": {"E", "NE", "SE"},
+        "W": {"W", "NW", "SW"},
+        "NE": {"N", "NE", "E"},
+        "NW": {"N", "NW", "W"},
+        "SE": {"S", "SE", "E"},
+        "SW": {"S", "SW", "W"},
+    }
+    return wind_dir.upper() in facing_map.get(window_orient.upper(), set())
+
+
+IsObliqueRain = _cond("斜风雨?",
+    lambda tm, _: (
+        tm.rain_detected
+        and tm.wind_speed_ms >= 2
+        and _wind_faces_window(tm.wind_direction, tm.orientation)
+    ))
+
 # ═══ P2 天气预报 ═══
 p2 = RULES["safety"]["p2_weather"]
 IsStormWind    = _cond("暴风>=6级?",
@@ -148,6 +174,12 @@ IsPreemptiveCloseNeeded = _cond("需要预判关窗?",
         and tm.window_open_pct > 5
         and not tm.rain_detected  # 还没下雨（如果已下雨，P1会处理）
     ))
+
+# ═══ 用户画像条件 ═══
+IsPetOwnerWindowOpen = _cond("养宠+窗开+纱窗未放?",
+    lambda tm, _: (tm.has_pets
+                   and tm.window_open_pct > 5
+                   and tm.screen_position_pct < 90))
 
 # ═══ P7 AI推荐 ═══
 HasAIRecommendation = _cond("有AI推荐?", lambda tm, _: tm.ai_recommendation is not None)

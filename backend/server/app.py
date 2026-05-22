@@ -93,10 +93,11 @@ ALL_AGENTS = [execution_agent, env_agent, safety_agent, security_agent, recommen
 ALLOWED_SENSOR_KEYS = {
     "rain_detected", "rain_level", "voc_mg", "co2_ppm",
     "temp_indoor_c", "temp_outdoor_c", "humidity_pct",
-    "wind_speed_ms", "wind_level", "lux", "human_detected",
+    "wind_speed_ms", "wind_level", "wind_direction", "lux", "human_detected",
     "noise_db", "aqi", "room_type", "time_hour", "orientation",
     "forecast_rain_prob", "forecast_rain_prob_ts",
     "pressure_hpa", "pressure_trend", "pressure_ts",
+    "user_profile", "has_pets", "has_allergy",
 }
 
 # WebSocket 连接池

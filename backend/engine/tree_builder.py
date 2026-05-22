@@ -41,7 +41,7 @@ from domain.capability import DeviceCapability
 from domain.decision_trace import DecisionTraceLog
 from engine.conditions import (
     IsObstacle, IsMotorOverheat, IsStalled,
-    IsRainDetected, IsVOCSpike,
+    IsRainDetected, IsVOCSpike, IsObliqueRain,
     IsStormWind, IsAQIDangerous, IsHumidityExtreme,
     IsStormWarning, NoStormWarning,
     IsDeviceNotReady, IsWindowOpen, IsScreenInterference,
@@ -53,6 +53,7 @@ from engine.conditions import (
     IsElderlyRoomCold, IsChildRoomAutoLimit,
     IsChildRoomScreenUp, IsBedroomNight, IsNoisyStudyOpen,
     IsPreemptiveCloseNeeded,
+    IsPetOwnerWindowOpen,
     HasAIRecommendation,
 )
 from engine.actions import (
@@ -103,6 +104,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
     # ── P1 本地传感器安全 ──
     p1 = _sel("P1 传感器安全",
         _seq("雨天关窗", n(IsRainDetected), n(IsWindowOpen), n(ActCloseWindow), n(ActLogRain)),
+        _seq("斜风雨关窗", n(IsObliqueRain), n(IsWindowOpen), n(ActCloseWindow), n(ActLogRain)),
         _seq("VOC关窗",  n(IsVOCSpike),     n(ActCloseWindow), n(ActLogVOC)),
     )
 
@@ -140,6 +142,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
         _seq("老人房防寒",       n(IsElderlyRoomCold),    n(ActCloseWindow)),
         _seq("儿童房超限关窗",   n(IsChildRoomAutoLimit), n(ActCloseWindow)),
         _seq("儿童房纱窗放下",   n(IsChildRoomScreenUp),  n(ActEnforceScreenDown)),
+        _seq("宠物防坠落",       n(IsPetOwnerWindowOpen), n(ActEnforceScreenDown)),
         _seq("卧室夜间限速",     n(IsBedroomNight),       n(ActLimitNightOpen)),
         _seq("书房噪声关窗",     n(IsNoisyStudyOpen),     n(ActCloseWindow)),
         _seq("西晒遮光",         n(IsWestSunGlare),       n(IsScreenUp), n(ActLowerScreenSun)),
