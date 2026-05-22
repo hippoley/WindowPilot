@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import BehaviorTreeGraph from './components/BehaviorTree'
+import WindowSVG from './components/WindowSVG'
 import './App.css'
 
 const WS_URL = `ws://${window.location.hostname || 'localhost'}:8001/ws`
@@ -89,8 +90,21 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ fontSize: 64, fontWeight: 800, fontFamily: 'monospace', color: '#D4A574' }}>{Math.round(win.open_pct || 0)}%</div>
-        <div style={{ fontSize: 11, color: '#A89070' }}>窗户 {win.state || 'closed'} · 纱窗 {Math.round(scr.position_pct || 0)}%</div>
+        {/* Window 3D-style SVG visualization */}
+        <WindowSVG
+          openPct={win.open_pct || 0}
+          screenPct={scr.position_pct || 0}
+          state={win.state || 'closed'}
+          motion={win.motion || 'stopped'}
+          actuatorState={act.state || 'idle'}
+          rain={!!sens.rain}
+          wind={sens.wind_speed || 0}
+          alarm={!!sec.alarm}
+        />
+        <div style={{ fontSize: 11, color: '#A89070', marginTop: 4 }}>
+          <span style={{ fontSize: 28, fontWeight: 800, fontFamily: 'monospace', color: '#D4A574' }}>{Math.round(win.open_pct || 0)}%</span>
+          {' '}· 纱窗 {Math.round(scr.position_pct || 0)}%
+        </div>
         <div style={{ fontSize: 10, color: '#5C4A35', fontFamily: 'monospace' }}>推窗器: {act.state || 'idle'} | 行程 {Math.round(act.stroke_mm || 0)}mm | 电流 {Math.round(act.current_ma || 120)}mA</div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
