@@ -50,7 +50,7 @@ class CandidateRanker:
             benefit += min(0.3, window_pct / 100 * 0.4)
         if "INDOOR_HOT_OUTDOOR_COOL" in tags:
             benefit += min(0.3, window_pct / 100 * 0.4)
-        if window_pct == 0 and ("RAIN" in str(tags) or "STRONG_WIND" in tags):
+        if window_pct == 0 and (any(t.startswith("RAIN") for t in tags) or "STRONG_WIND" in tags):
             benefit += 0.5  # 关窗在危险时收益高
 
         # 用户适配分（基于模式偏好）
@@ -71,7 +71,7 @@ class CandidateRanker:
             risk += 0.4
         if "ELDERLY_ROOM_PROTECTION" in tags and window_pct > 30:
             risk += 0.3
-        if "RAIN" in str(tags) and window_pct > 15:
+        if any(t.startswith("RAIN") for t in tags) and window_pct > 15:
             risk += 0.3
         if "STRONG_WIND" in tags and window_pct > 0:
             risk += 0.5

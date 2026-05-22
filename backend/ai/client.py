@@ -3,10 +3,14 @@ MiniMax API 客户端
 统一封装，支持 chat 和 VLM
 """
 import json
+import logging
+import os
 import urllib.request
 from typing import Optional
 import yaml
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class MiniMaxClient:
@@ -16,7 +20,7 @@ class MiniMaxClient:
         with open(config_path, 'r') as f:
             cfg = yaml.safe_load(f)
         mm = cfg["minimax"]
-        self.api_key = mm["api_key"]
+        self.api_key = os.environ.get("MINIMAX_API_KEY", mm["api_key"])
         self.chat_url = mm["chat_url"]
         self.vlm_url = mm["vlm_url"]
         self.model = mm["model"]
@@ -47,7 +51,8 @@ class MiniMaxClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 result = json.loads(resp.read())
             return result["choices"][0]["message"]["content"]
-        except Exception:
+        except Exception as e:
+            logger.warning("MiniMax API call failed: %s", e)
             return None
 
     def vlm(self, prompt: str, image_b64: str) -> Optional[str]:
@@ -71,5 +76,6 @@ class MiniMaxClient:
                 if key in result and isinstance(result[key], str) and result[key]:
                     return result[key]
             return None
-        except Exception:
+        except Exception as e:
+            logger.warning("MiniMax API call failed: %s", e)
             return None

@@ -75,7 +75,7 @@ class RuleFallback:
                     "needs_confirm": False, "duration_min": None}
         # CO₂ 高
         if "CO2_VERY_HIGH" in tags or "CO2_HIGH" in tags:
-            pct = max(10, min(50, int((tm.co2_ppm - 800) / 20)))
+            pct = max(10, min(50, int((tm.co2_ppm - 800) / 15)))  # 800→10%, 1550→50%
             if "CHILD_ROOM_HIGH_SAFETY" in tags:
                 pct = min(pct, 10)
             return {"window_pct": pct, "screen_pct": 100,

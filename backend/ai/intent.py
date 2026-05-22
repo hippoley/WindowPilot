@@ -7,6 +7,7 @@ AI-1 意图理解 (Intent Understanding)
 不能做：不能越过规则直接控硬件
 """
 import json
+import re
 from typing import Optional, Dict
 from ai.client import MiniMaxClient
 
@@ -53,10 +54,10 @@ class IntentParser:
         if not content:
             return None
         try:
-            if "```" in content:
-                content = content.split("```")[1]
-                if content.startswith("json"):
-                    content = content[4:]
+            # Extract JSON from potential markdown code fences
+            json_match = re.search(r'\{[^{}]*\}', content)
+            if json_match:
+                content = json_match.group(0)
             result = json.loads(content.strip())
             # 校验
             result["confidence"] = min(1.0, max(0.0, float(result.get("confidence", 0.5))))
@@ -77,7 +78,7 @@ class IntentParser:
         # 提取数字百分比（"开窗70%" "开到50" "30%"）
         num_match = re.search(r'(\d+)\s*[%％]?', text)
         extracted_num = int(num_match.group(1)) if num_match else None
-        if extracted_num and extracted_num > 100:
+        if extracted_num is not None and extracted_num > 100:
             extracted_num = None  # 排除非百分比数字如CO₂值
 
         # 房间识别
@@ -96,7 +97,7 @@ class IntentParser:
             intent = "stop"
         elif "开" in text or "通风" in text or "透气" in text or "闷" in text or "热" in text:
             intent = "open"
-            if extracted_num and 0 < extracted_num <= 100:
+            if extracted_num is not None and 0 < extracted_num <= 100:
                 target = extracted_num
             elif "大" in text or "全开" in text or "最大" in text:
                 target = 80

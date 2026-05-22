@@ -57,7 +57,7 @@ class Explainer:
         tags = snapshot.tags
         pct = action.get("window_pct", 0)
 
-        if "RAIN" in str(tags) and pct == 0:
+        if any(t.startswith("RAIN") for t in tags) and pct == 0:
             return "检测到降雨，已关窗保护。"
         if "STRONG_WIND" in tags and pct == 0:
             return "风力较大，已关窗保护。"
