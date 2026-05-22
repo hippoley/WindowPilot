@@ -85,8 +85,8 @@ export default function App() {
           <Btn label="全开" onClick={() => send({ cmd: 'user_open_to', value: 100 })} />
           <Btn label="停止" onClick={() => send({ cmd: 'user_stop' })} color="#E8B86D" />
           <Btn label="关窗" onClick={() => send({ cmd: 'user_open_to', value: 0 })} />
-          <Btn label="\uD83D\uDD12 布防" onClick={() => send({ cmd: 'security_arm' })} />
-          <Btn label="\uD83D\uDD13 撤防" onClick={() => send({ cmd: 'security_disarm' })} />
+          <Btn label="\uD83D\uDD12 布防" onClick={() => send({ cmd: 'arm_security' })} />
+          <Btn label="\uD83D\uDD13 撤防" onClick={() => send({ cmd: 'disarm_security' })} />
         </div>
         {/* Scene Cards */}
         <SectionTitle text="场景卡片" />
