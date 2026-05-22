@@ -95,6 +95,8 @@ ALLOWED_SENSOR_KEYS = {
     "temp_indoor_c", "temp_outdoor_c", "humidity_pct",
     "wind_speed_ms", "wind_level", "lux", "human_detected",
     "noise_db", "aqi", "room_type", "time_hour", "orientation",
+    "forecast_rain_prob", "forecast_rain_prob_ts",
+    "pressure_hpa", "pressure_trend", "pressure_ts",
 }
 
 # WebSocket 连接池

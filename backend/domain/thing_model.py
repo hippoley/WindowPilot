@@ -67,6 +67,13 @@ class ThingModel:
     aqi: float = 50.0
     aqi_ts: float = 0.0
 
+    # ── 天气预报（云端推送，非本地传感器）──
+    forecast_rain_prob: float = 0.0       # 未来1小时降水概率 0-1
+    forecast_rain_prob_ts: float = 0.0
+    pressure_hpa: float = 1013.0          # 当前气压 hPa
+    pressure_trend: str = "stable"        # rising/stable/falling/plunging
+    pressure_ts: float = 0.0
+
     # ── 设备配置/状态 ──
     room_type: str = "bedroom"
     orientation: str = "S"                # 窗朝向：N/S/E/W/NE/NW/SE/SW
@@ -143,6 +150,8 @@ class ThingModel:
                 "human": self.human_detected,
                 "noise_db": self.noise_db,
                 "aqi": self.aqi,
+                "forecast_rain_prob": self.forecast_rain_prob,
+                "pressure_hpa": self.pressure_hpa,
             },
             "config": {
                 "room_type": self.room_type,

@@ -137,5 +137,17 @@ IsWestSunGlare = _cond("西晒眩光?",
 IsScreenUp     = _cond("纱窗收起?",
     lambda tm, _: tm.screen_position_pct < 50)
 
+# ═══ 天气预报预判 ═══
+IsRainForecast = _cond("降水概率高?",
+    lambda tm, _: tm.forecast_rain_prob > 0.7 and tm.is_sensor_fresh(tm.forecast_rain_prob_ts))
+IsPressurePlunging = _cond("气压骤降?",
+    lambda tm, _: tm.pressure_trend == "plunging" and tm.is_sensor_fresh(tm.pressure_ts))
+IsPreemptiveCloseNeeded = _cond("需要预判关窗?",
+    lambda tm, _: (
+        (tm.forecast_rain_prob > 0.7 or tm.pressure_trend == "plunging")
+        and tm.window_open_pct > 5
+        and not tm.rain_detected  # 还没下雨（如果已下雨，P1会处理）
+    ))
+
 # ═══ P7 AI推荐 ═══
 HasAIRecommendation = _cond("有AI推荐?", lambda tm, _: tm.ai_recommendation is not None)

@@ -52,6 +52,7 @@ from engine.conditions import (
     IsWestSunGlare, IsScreenUp,
     IsElderlyRoomCold, IsChildRoomAutoLimit,
     IsChildRoomScreenUp, IsBedroomNight, IsNoisyStudyOpen,
+    IsPreemptiveCloseNeeded,
     HasAIRecommendation,
 )
 from engine.actions import (
@@ -107,6 +108,7 @@ def build_tree(tm: ThingModel, cap: DeviceCapability,
 
     # ── P2 天气预报 ──
     p2 = _sel("P2 天气预报",
+        _seq("预判关窗",  n(IsPreemptiveCloseNeeded), n(ActCloseWindow)),
         _seq("强风关窗",  n(IsStormWind),       n(ActCloseWindow), n(ActLogWind)),
         _seq("AQI关窗",   n(IsAQIDangerous),    n(ActCloseWindow), n(ActLogAQI)),
         _seq("极端湿度",  n(IsHumidityExtreme), n(ActCloseWindow)),
