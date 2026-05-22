@@ -7,23 +7,27 @@ AI-2 场景检索 (Scene Retrieval / RAG)
 不能做：不是最终裁判，只提供参考
 """
 import json
+import yaml
+from pathlib import Path
 from typing import List, Dict, Optional
 from ai.client import MiniMaxClient
 from domain.context_snapshot import ContextSnapshot
 from domain.capability import DeviceCapability
 
-# 内置用户故事库（实际产品中应该是向量数据库）
+# 从 YAML 配置加载场景模板库（运营可维护，无需改代码）
+_TEMPLATES_PATH = Path(__file__).parent.parent / "config" / "scene_templates.yaml"
+try:
+    with open(_TEMPLATES_PATH) as f:
+        _TEMPLATES_CFG = yaml.safe_load(f)
+    SCENE_TEMPLATES = _TEMPLATES_CFG.get("templates", [])
+except FileNotFoundError:
+    SCENE_TEMPLATES = []
+
+# 兼容旧接口
 USER_STORIES = [
-    {"id": "s001", "tags": ["CO2_HIGH", "BEDROOM", "NIGHT_TIME"], "action": "open_10_screen_down_15min", "desc": "卧室夜间CO₂高，微开10%通风15分钟"},
-    {"id": "s002", "tags": ["CO2_VERY_HIGH", "BEDROOM"], "action": "open_30_screen_down_20min", "desc": "卧室CO₂很高，开窗30%通风20分钟"},
-    {"id": "s003", "tags": ["RAIN_NOW", "CO2_HIGH", "CHILD_ROOM_HIGH_SAFETY"], "action": "open_10_screen_down_10min_confirm", "desc": "儿童房下雨+CO₂高，微开10%需确认"},
-    {"id": "s004", "tags": ["HUMIDITY_HIGH", "BEDROOM"], "action": "open_20_screen_down_15min", "desc": "卧室湿度高，开窗20%除湿"},
-    {"id": "s005", "tags": ["INDOOR_HOT_OUTDOOR_COOL"], "action": "open_40_screen_down_30min", "desc": "室内热室外凉，开窗40%自然降温"},
-    {"id": "s006", "tags": ["NOISE_HIGH", "STUDY_ROOM"], "action": "close_window", "desc": "书房噪声高，关窗降噪"},
-    {"id": "s007", "tags": ["STRONG_WIND"], "action": "close_window", "desc": "强风天气，关窗保护"},
-    {"id": "s008", "tags": ["ELDERLY_ROOM_PROTECTION", "INDOOR_COLD"], "action": "close_window", "desc": "老人房低温，关窗防寒"},
-    {"id": "s009", "tags": ["CHILD_ROOM_HIGH_SAFETY", "HUMAN_PRESENT"], "action": "open_10_screen_down_confirm", "desc": "儿童房有人，最大10%需确认"},
-    {"id": "s010", "tags": ["VOC_SPIKE"], "action": "close_window_immediately", "desc": "VOC突变，立即关窗"},
+    {"id": t["id"], "template_key": t.get("template_key", ""),
+     "tags": t["tags"], "action": t["action"], "desc": t["description"]}
+    for t in SCENE_TEMPLATES
 ]
 
 RETRIEVER_PROMPT = """你是智能门窗场景检索器。
@@ -51,7 +55,7 @@ class SceneRetriever:
         for story in USER_STORIES:
             overlap = len(set(story["tags"]) & set(snapshot.tags))
             if overlap > 0:
-                scored.append((overlap / max(len(story["tags"]), 1), story))
+                scored.append((overlap / max(len(story["tags"]), len(snapshot.tags)), story))
         scored.sort(key=lambda x: -x[0])
         top_stories = scored[:5]
 
@@ -80,59 +84,20 @@ class SceneRetriever:
         return self._rule_retrieve(snapshot, top_stories)
 
     def _rule_retrieve(self, snapshot: ContextSnapshot, top_stories: list) -> List[Dict]:
-        """规则兜底检索 — 输出符合图4/5的 candidate_plan 格式"""
+        """规则兜底检索 — 直接使用 YAML 模板中的 action 字段"""
         candidates = []
-        tags = snapshot.tags
         for score, story in top_stories[:3]:
             action = story["action"]
-            cand = {"story_id": story["id"], "similarity": round(score, 2)}
-            # 构建符合 schema 的 candidate_plan
-            if "open_10" in action:
-                cand["candidate"] = {
-                    "plan_id": "micro_ventilation_10",
-                    "window_pct": 10, "screen_pct": 100, "duration_min": 10,
-                    "needs_confirm": "confirm" in action or "CHILD_ROOM" in str(tags),
-                    "guards": ["rain_level<=moderate", "wind_speed<=10"],
-                    "expected_benefit": 0.6,
-                    "main_risk": "通风效果有限",
-                }
-            elif "open_20" in action:
-                cand["candidate"] = {
-                    "plan_id": "ventilation_20",
-                    "window_pct": 20, "screen_pct": 100, "duration_min": 15,
-                    "needs_confirm": False,
-                    "guards": ["rain_level<=light", "wind_speed<=8"],
-                    "expected_benefit": 0.75,
-                    "main_risk": "湿气进入",
-                }
-            elif "open_30" in action:
-                cand["candidate"] = {
-                    "plan_id": "ventilation_30",
-                    "window_pct": 30, "screen_pct": 100, "duration_min": 20,
-                    "needs_confirm": False,
-                    "guards": ["rain=false", "wind_speed<=6", "aqi<=100"],
-                    "expected_benefit": 0.82,
-                    "main_risk": "PM2.5短时反弹",
-                }
-            elif "open_40" in action:
-                cand["candidate"] = {
-                    "plan_id": "full_ventilation_40",
-                    "window_pct": 40, "screen_pct": 100, "duration_min": 30,
-                    "needs_confirm": False,
-                    "guards": ["rain=false", "wind_speed<=5", "aqi<=75"],
-                    "expected_benefit": 0.88,
-                    "main_risk": "噪声增加",
-                }
-            elif "close" in action:
-                cand["candidate"] = {
-                    "plan_id": "close_protect",
-                    "window_pct": 0, "screen_pct": 0, "duration_min": None,
-                    "needs_confirm": False,
-                    "guards": [],
-                    "expected_benefit": 0.4,
-                    "main_risk": "室内闷热",
-                }
-            else:
-                continue
+            cand = {
+                "story_id": story["id"],
+                "template_key": story.get("template_key", ""),
+                "similarity": round(score, 2),
+                "candidate": {
+                    "window_pct": action["window_pct"],
+                    "screen_pct": action["screen_pct"],
+                    "duration_min": action.get("duration_min"),
+                    "needs_confirm": action.get("needs_confirm", False),
+                },
+            }
             candidates.append(cand)
         return candidates

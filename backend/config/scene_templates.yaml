@@ -1,0 +1,168 @@
+# 场景模板库 — 运营维护，无需改代码
+# 每个模板包含 template_key 用于与用户记忆库去重
+
+templates:
+  - id: s001
+    template_key: bedroom_night_co2
+    name: "卧室夜间CO₂通风"
+    description: "卧室夜间CO₂偏高，微开通风15分钟"
+    tags: [CO2_HIGH, BEDROOM, NIGHT_TIME]
+    action:
+      window_pct: 10
+      screen_pct: 100
+      duration_min: 15
+      needs_confirm: false
+
+  - id: s002
+    template_key: bedroom_co2_high
+    name: "卧室CO₂很高通风"
+    description: "卧室CO₂很高，开窗30%通风20分钟"
+    tags: [CO2_VERY_HIGH, BEDROOM]
+    action:
+      window_pct: 30
+      screen_pct: 100
+      duration_min: 20
+      needs_confirm: false
+
+  - id: s003
+    template_key: child_rain_co2
+    name: "儿童房下雨+CO₂高"
+    description: "儿童房下雨但CO₂高，微开10%需确认"
+    tags: [CO2_HIGH, CHILD_ROOM_HIGH_SAFETY, RAIN_LIGHT]
+    action:
+      window_pct: 10
+      screen_pct: 100
+      duration_min: 10
+      needs_confirm: true
+
+  - id: s004
+    template_key: humidity_ventilation
+    name: "湿度高除湿通风"
+    description: "湿度偏高，开窗20%除湿"
+    tags: [HUMIDITY_HIGH, BEDROOM]
+    action:
+      window_pct: 20
+      screen_pct: 100
+      duration_min: 15
+      needs_confirm: false
+
+  - id: s005
+    template_key: natural_cooling
+    name: "自然降温"
+    description: "室内热室外凉，开窗40%自然降温"
+    tags: [INDOOR_HOT_OUTDOOR_COOL]
+    action:
+      window_pct: 40
+      screen_pct: 100
+      duration_min: 30
+      needs_confirm: false
+
+  - id: s006
+    template_key: study_noise_close
+    name: "书房降噪关窗"
+    description: "书房噪声高，关窗降噪"
+    tags: [NOISE_HIGH, STUDY_ROOM]
+    action:
+      window_pct: 0
+      screen_pct: 0
+      duration_min: null
+      needs_confirm: false
+
+  - id: s007
+    template_key: storm_protect
+    name: "强风保护关窗"
+    description: "强风天气，关窗保护"
+    tags: [STRONG_WIND]
+    action:
+      window_pct: 0
+      screen_pct: 0
+      duration_min: null
+      needs_confirm: false
+
+  - id: s008
+    template_key: elderly_cold_protect
+    name: "老人房防寒关窗"
+    description: "老人房低温，关窗防寒"
+    tags: [ELDERLY_ROOM_PROTECTION, INDOOR_COLD]
+    action:
+      window_pct: 0
+      screen_pct: 0
+      duration_min: null
+      needs_confirm: false
+
+  - id: s009
+    template_key: child_safety_vent
+    name: "儿童房安全通风"
+    description: "儿童房有人，最大10%需确认"
+    tags: [CHILD_ROOM_HIGH_SAFETY, HUMAN_PRESENT]
+    action:
+      window_pct: 10
+      screen_pct: 100
+      duration_min: 15
+      needs_confirm: true
+
+  - id: s010
+    template_key: voc_emergency_close
+    name: "VOC突变关窗"
+    description: "VOC突变，立即关窗"
+    tags: [VOC_SPIKE]
+    action:
+      window_pct: 0
+      screen_pct: 0
+      duration_min: null
+      needs_confirm: false
+
+  - id: s011
+    template_key: morning_fresh_air
+    name: "早晨新鲜空气"
+    description: "早晨开窗换气，迎接新一天"
+    tags: [MORNING, HUMAN_PRESENT]
+    action:
+      window_pct: 30
+      screen_pct: 100
+      duration_min: 20
+      needs_confirm: false
+
+  - id: s012
+    template_key: west_sun_screen
+    name: "西晒遮光"
+    description: "下午西晒，降纱窗遮光通风"
+    tags: [WEST_SUN_GLARE, AFTERNOON]
+    action:
+      window_pct: 30
+      screen_pct: 100
+      duration_min: null
+      needs_confirm: false
+
+  - id: s013
+    template_key: back_south_wind_close
+    name: "回南天关窗"
+    description: "高湿南风回南天，关窗防潮"
+    tags: [BACK_SOUTH_WIND, HUMIDITY_HIGH]
+    action:
+      window_pct: 0
+      screen_pct: 0
+      duration_min: null
+      needs_confirm: false
+
+  - id: s014
+    template_key: aqi_poor_reduce
+    name: "空气质量差减小开度"
+    description: "AQI偏高，减小开窗幅度"
+    tags: [AQI_POOR]
+    action:
+      window_pct: 10
+      screen_pct: 100
+      duration_min: null
+      needs_confirm: false
+
+  - id: s015
+    template_key: night_sleep_micro
+    name: "夜间睡眠微通风"
+    description: "夜间保持微缝通风，保证睡眠氧气"
+    tags: [NIGHT_TIME, BEDROOM, HUMAN_PRESENT]
+    action:
+      window_pct: 8
+      screen_pct: 100
+      duration_min: null
+      needs_confirm: false
