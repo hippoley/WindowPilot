@@ -33,7 +33,7 @@ from domain.thing_model import ThingModel
 from domain.capability import DeviceCapability
 from domain.context_snapshot import ContextSnapshot
 from domain.decision_trace import DecisionTraceLog
-from agents import SafetyAgent, EnvironmentAgent, RecommendAgent, ExecutionAgent, LearnerAgent
+from agents import SafetyAgent, EnvironmentAgent, RecommendAgent, ExecutionAgent, LearnerAgent, SecurityAgent
 from ai.client import MiniMaxClient
 from ai.intent import IntentParser
 from ai.goal_inference import GoalInference
@@ -77,14 +77,15 @@ ai_ranker    = CandidateRanker()
 ai_explainer = Explainer(ai_client) if ai_client else None
 rule_fallback = RuleFallback()
 
-# ═══ 5 Agents ═══
+# ═══ 6 Agents ═══
 execution_agent = ExecutionAgent(cap)
 env_agent = EnvironmentAgent(cap)
 safety_agent = SafetyAgent(cap, trace)
+security_agent = SecurityAgent(trace)
 recommend_agent = RecommendAgent()
 learner_agent = LearnerAgent()
 
-ALL_AGENTS = [execution_agent, env_agent, safety_agent, recommend_agent, learner_agent]
+ALL_AGENTS = [execution_agent, env_agent, safety_agent, security_agent, recommend_agent, learner_agent]
 
 # 传感器白名单
 ALLOWED_SENSOR_KEYS = {
@@ -201,6 +202,9 @@ async def tick_loop():
 
             # 3. 行为树安全决策
             safety_agent.safe_tick(tm, snapshot)
+
+            # 3.5 安防检测
+            security_agent.safe_tick(tm, snapshot)
 
             # 4. 异步 AI 推荐（不阻塞）
             if (tm.bt_active_branch == "P5.NeedGenerate"
@@ -359,6 +363,12 @@ async def handle_command(msg: dict):
                 trace.record(tm, "AI-1.Intent", f"'{text}' → keyword close", "success")
             else:
                 trace.record(tm, "AI-1.Intent", f"'{text}' → unknown", "failure")
+
+    elif cmd == "arm_security":
+        security_agent.arm(tm)
+
+    elif cmd == "disarm_security":
+        security_agent.disarm(tm)
 
     elif cmd == "set_mode":
         tm.mode = str(value)

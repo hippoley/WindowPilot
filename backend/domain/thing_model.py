@@ -86,6 +86,14 @@ class ThingModel:
     ai_recommendation: Optional[Dict[str, Any]] = None
     recommendation_card: Optional[Dict[str, Any]] = None
 
+    # ── 安防系统 ──
+    security_mode: bool = False           # 安防模式开启
+    auto_security_night: bool = True      # 夜间自动布防
+    security_armed_ts: float = 0.0        # 布防时间戳
+    alarm_triggered: bool = False         # 报警触发
+    alarm_reason: str = ""                # 报警原因: tamper/forced_open
+    alarm_ts: float = 0.0                 # 报警时间戳
+
     # ── 行为树运行时元数据（不属于设备状态，仅用于推送和调试）──
     bt_active_branch: str = "Idle"
     bt_result: str = "success"
@@ -147,6 +155,12 @@ class ThingModel:
                 "user_command": self.user_command,
                 "bt_branch": self.bt_active_branch,
                 "bt_result": self.bt_result,
+            },
+            "security": {
+                "mode": self.security_mode,
+                "auto_night": self.auto_security_night,
+                "alarm": self.alarm_triggered,
+                "alarm_reason": self.alarm_reason,
             },
             "ai": {
                 "recommendation": self.ai_recommendation,
