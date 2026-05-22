@@ -4,7 +4,7 @@
 """
 import time as _time
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 @dataclass
@@ -91,6 +91,7 @@ class ThingModel:
 
     # ── AI ──
     ai_recommendation: Optional[Dict[str, Any]] = None
+    ai_recommendations: Optional[List[Dict[str, Any]]] = None  # 多条推荐列表（最多6条）
     recommendation_card: Optional[Dict[str, Any]] = None
 
     # ── 安防系统 ──
@@ -173,6 +174,7 @@ class ThingModel:
             },
             "ai": {
                 "recommendation": self.ai_recommendation,
+                "recommendations": self.ai_recommendations or [],
                 "card": self.recommendation_card,
             },
         }

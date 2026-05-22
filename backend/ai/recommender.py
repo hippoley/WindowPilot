@@ -3,7 +3,7 @@ AI 推荐器 + 解释器
 可降级：AI 不可用时使用规则兜底
 """
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from ai.client import MiniMaxClient
 from domain.context_snapshot import ContextSnapshot
 from domain.capability import DeviceCapability
@@ -67,29 +67,56 @@ class RuleFallback:
     """规则兜底推荐器"""
 
     def generate(self, tm: ThingModel, snapshot: ContextSnapshot, cap: DeviceCapability) -> Optional[Dict[str, Any]]:
+        """生成单条兜底推荐（向后兼容）"""
+        results = self.generate_multi(tm, snapshot, cap)
+        if results:
+            return results[0]
+        return None
+
+    def generate_multi(self, tm: ThingModel, snapshot: ContextSnapshot, cap: DeviceCapability) -> List[Dict[str, Any]]:
+        """生成多条规则兜底推荐（最多3条），每条带 source 和 confidence"""
         tags = snapshot.tags
+        recommendations: List[Dict[str, Any]] = []
+
         # 危险 → 关窗
         if snapshot.risk_level == "danger":
-            return {"window_pct": 0, "screen_pct": tm.screen_position_pct,
-                    "title": "安全关窗", "reason": "检测到危险条件，建议关窗",
-                    "needs_confirm": False, "duration_min": None}
+            recommendations.append({
+                "window_pct": 0, "screen_pct": tm.screen_position_pct,
+                "title": "安全关窗", "reason": "检测到危险条件，建议关窗",
+                "needs_confirm": False, "duration_min": None,
+                "source": "rule_fallback", "confidence": 0.95, "template_key": "danger_close",
+            })
+            return recommendations  # 危险时只返回关窗
+
         # CO₂ 高
         if "CO2_VERY_HIGH" in tags or "CO2_HIGH" in tags:
             pct = max(10, min(50, int((tm.co2_ppm - 800) / 15)))  # 800→10%, 1550→50%
             if "CHILD_ROOM_HIGH_SAFETY" in tags:
                 pct = min(pct, 10)
-            return {"window_pct": pct, "screen_pct": 100,
-                    "title": "建议通风", "reason": f"CO₂ {tm.co2_ppm:.0f}ppm，建议开窗{pct}%",
-                    "needs_confirm": "CHILD_ROOM_HIGH_SAFETY" in tags,
-                    "duration_min": 15}
+            recommendations.append({
+                "window_pct": pct, "screen_pct": 100,
+                "title": "建议通风", "reason": f"CO₂ {tm.co2_ppm:.0f}ppm，建议开窗{pct}%",
+                "needs_confirm": "CHILD_ROOM_HIGH_SAFETY" in tags,
+                "duration_min": 15,
+                "source": "rule_fallback", "confidence": 0.85, "template_key": "co2_ventilate",
+            })
+
         # 湿度高
         if "HUMIDITY_HIGH" in tags:
-            return {"window_pct": 20, "screen_pct": 100,
-                    "title": "除湿通风", "reason": f"湿度{tm.humidity_pct:.0f}%偏高",
-                    "needs_confirm": False, "duration_min": 10}
+            recommendations.append({
+                "window_pct": 20, "screen_pct": 100,
+                "title": "除湿通风", "reason": f"湿度{tm.humidity_pct:.0f}%偏高",
+                "needs_confirm": False, "duration_min": 10,
+                "source": "rule_fallback", "confidence": 0.75, "template_key": "humidity_ventilate",
+            })
+
         # 室内热
         if "INDOOR_HOT_OUTDOOR_COOL" in tags:
-            return {"window_pct": 40, "screen_pct": 100,
-                    "title": "自然降温", "reason": f"室内{tm.temp_indoor_c}°C，室外凉爽",
-                    "needs_confirm": False, "duration_min": 20}
-        return None
+            recommendations.append({
+                "window_pct": 40, "screen_pct": 100,
+                "title": "自然降温", "reason": f"室内{tm.temp_indoor_c}°C，室外凉爽",
+                "needs_confirm": False, "duration_min": 20,
+                "source": "rule_fallback", "confidence": 0.70, "template_key": "natural_cooling",
+            })
+
+        return recommendations[:3]

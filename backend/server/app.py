@@ -129,9 +129,9 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
         if ai_retriever:
             candidates = await asyncio.to_thread(ai_retriever.retrieve, snapshot, cap)
         if not candidates:
-            fb = rule_fallback.generate(tm, snapshot, cap)
-            if fb:
-                candidates = [{"candidate": fb, "similarity": 0.5, "story_id": "fallback"}]
+            fb_list = rule_fallback.generate_multi(tm, snapshot, cap)
+            if fb_list:
+                candidates = [{"candidate": fb, "similarity": 0.5, "story_id": "fallback"} for fb in fb_list]
 
         if not candidates:
             trace.record(tm, "AI.Pipeline", "no_candidates", "failure")
@@ -141,16 +141,36 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
         if not ranked:
             return
 
-        best = ranked[0].get("candidate", ranked[0])
+        # 取 top 6 候选
+        top_n = ranked[:6]
+        recommendations = []
 
-        # Policy Gate: 安全裁剪
-        if "CHILD_ROOM_HIGH_SAFETY" in snapshot.tags:
-            best["window_pct"] = min(best.get("window_pct", 10), 10)
-            best["needs_confirm"] = True
-        if any(t.startswith("RAIN") for t in snapshot.tags):
-            best["window_pct"] = 0
+        for i, item in enumerate(top_n):
+            rec = dict(item.get("candidate", item))
 
-        # AI-4: 解释生成
+            # Policy Gate: 安全裁剪
+            if "CHILD_ROOM_HIGH_SAFETY" in snapshot.tags:
+                rec["window_pct"] = min(rec.get("window_pct", 10), 10)
+                rec["needs_confirm"] = True
+            if any(t.startswith("RAIN") for t in snapshot.tags):
+                rec["window_pct"] = 0
+
+            # 填充标题和理由
+            rec["title"] = rec.get("title", "建议调整窗户")
+            if not rec.get("reason"):
+                rec["reason"] = f"建议开窗{rec.get('window_pct', 0)}%"
+            rec["needs_confirm"] = rec.get("needs_confirm", True)
+
+            # 来源标签和置信度
+            if "source" not in rec:
+                rec["source"] = "template" if item.get("template_key") or item.get("story_id", "").startswith("s") else "ai_generated"
+            rec["confidence"] = round(item.get("score", 0.5), 3)
+            rec["template_key"] = item.get("template_key", rec.get("template_key", ""))
+
+            recommendations.append(rec)
+
+        # AI-4: 为主推荐生成解释
+        best = recommendations[0]
         reason = ""
         if ai_explainer:
             reason = await asyncio.to_thread(ai_explainer.explain, tm, snapshot, best)
@@ -158,22 +178,22 @@ async def _run_ai_pipeline(snapshot: ContextSnapshot):
             reason = (ai_explainer._rule_explain(tm, snapshot, best)
                       if ai_explainer
                       else f"建议开窗{best.get('window_pct', 0)}%")
-
-        best["title"] = best.get("title", "建议调整窗户")
         best["reason"] = reason
-        best["needs_confirm"] = best.get("needs_confirm", True)
 
-        # AI-5: 偏好微调
+        # AI-5: 偏好微调（仅主推荐）
         preferred = learner_agent.get_preferred_pct(tm.room_type, tm.time_hour)
         if learner_agent.learner.get_confidence() > 0.3:
             best["window_pct"] = int((best.get("window_pct", 30) + preferred) / 2)
 
-        tm.ai_recommendation = best
+        # 写回 ThingModel
+        tm.ai_recommendations = recommendations
+        tm.ai_recommendation = best  # 向后兼容（BT P7 使用）
+
         elapsed = (time.time() - t0) * 1000
         trace.record(tm, "AI.Pipeline",
-                     f"retrieve→rank→explain: {best.get('window_pct')}% ({elapsed:.0f}ms)",
+                     f"retrieve→rank→explain: {best.get('window_pct')}% x{len(recommendations)} ({elapsed:.0f}ms)",
                      "success")
-        logger.info(f"AI pipeline completed in {elapsed:.0f}ms → {best.get('window_pct')}%")
+        logger.info(f"AI pipeline completed in {elapsed:.0f}ms → {best.get('window_pct')}% ({len(recommendations)} recs)")
 
     except Exception as e:
         logger.warning(f"AI pipeline failed: {e}")
@@ -314,6 +334,7 @@ async def handle_command(msg: dict):
             elif field_type == str:
                 setattr(tm, key, str(value))
             tm.ai_recommendation = None
+            tm.ai_recommendations = None
             tm.recommendation_card = None
 
     elif cmd == "user_open_to":
@@ -335,12 +356,14 @@ async def handle_command(msg: dict):
             tm.user_command = {"source": "ai_confirmed", "action": "open_to", "target_pct": target}
             trace.record(tm, "User.Accept", f"confirmed_{target}%", "success")
             tm.ai_recommendation = None
+            tm.ai_recommendations = None
             tm.recommendation_card = None
 
     elif cmd == "reject_recommendation":
         if tm.recommendation_card:
             learner_agent.on_reject(tm.recommendation_card, tm.room_type, tm.time_hour)
         tm.ai_recommendation = None
+        tm.ai_recommendations = None
         tm.recommendation_card = None
         trace.record(tm, "User.Reject", "rejected", "success")
 
