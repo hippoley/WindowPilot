@@ -272,7 +272,7 @@ async def tick_loop():
 def _build_tree_snapshot(node, path="") -> dict:
     name = node.name
     full_path = f"{path}/{name}" if path else name
-    status = node.status.value if hasattr(node, "status") and node.status else "invalid"
+    status = node.status.value.lower() if hasattr(node, "status") and node.status else "invalid"
     children = []
     if hasattr(node, "children"):
         for child in node.children:
