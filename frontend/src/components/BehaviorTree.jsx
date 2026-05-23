@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useEffect } from 'react'
-import ReactFlow, { Background, Controls, useReactFlow, ReactFlowProvider } from 'reactflow'
+import { useMemo } from 'react'
+import ReactFlow, { Background, Controls, ReactFlowProvider } from 'reactflow'
 import 'reactflow/dist/style.css'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -26,16 +26,22 @@ function collectStats(node, acc = { running: 0, success: 0, failure: 0 }) {
 
 // ─── Summary Card ───────────────────────────────────────────────────────────
 function SummaryCard({ stats }) {
-  const item = (color, count, label) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color, flex: 1, justifyContent: 'center' }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
-      {count} {label}
-    </div>
-  )
-  const sep = <div style={{ width: 1, background: 'var(--glass-border)', alignSelf: 'stretch' }} />
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '8px 10px', marginBottom: 6, borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--glass-border)' }}>
-      {item('var(--warning)', stats.running, '运行中')}{sep}{item('var(--success)', stats.success, '成功')}{sep}{item('var(--danger)', stats.failure, '失败')}
+    <div className="bt-summary">
+      <div className="bt-stat">
+        <span className="bt-stat-dot warning" />
+        {stats.running} 运行中
+      </div>
+      <div className="bt-stat-sep" />
+      <div className="bt-stat">
+        <span className="bt-stat-dot success" />
+        {stats.success} 成功
+      </div>
+      <div className="bt-stat-sep" />
+      <div className="bt-stat">
+        <span className="bt-stat-dot danger" />
+        {stats.failure} 失败
+      </div>
     </div>
   )
 }
@@ -91,55 +97,44 @@ function buildFlowData(node, x, y, parentId, nodes, edges, activePath) {
   }
 }
 
-// ─── Custom Node ────────────────────────────────────────────────────────────
+// ─── Custom Node (uses CSS custom properties for dynamic colors) ─────────────
 function BTNodeComponent({ data }) {
   const { label, type, status } = data
   const sc = STATUS_COLORS[status] || STATUS_COLORS.invalid
   const typeLabel = TYPE_LABELS[type] || 'ACT'
-  const isRunning = status === 'running'
-  const borderRadius = type === 'Sequence' ? 4 : 14
+  const isSequence = type === 'Sequence'
 
   return (
-    <div style={{
-      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-      background: sc.bg, border: `1.5px solid ${sc.border}`, borderRadius,
-      boxShadow: sc.shadow, padding: '0 8px', boxSizing: 'border-box',
-      animation: isRunning ? 'btPulse 1.8s ease-in-out infinite' : 'none',
-      transition: 'border-color 0.3s, box-shadow 0.3s, background 0.3s',
-    }}>
-      <span style={{ fontSize: 13, color: '#e5e5e5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#a3a3a3', fontFamily: 'monospace', flexShrink: 0 }}>
-        {typeLabel}
-      </span>
+    <div
+      className={`bt-node ${status === 'running' ? 'bt-node--running' : ''} ${isSequence ? 'bt-node--seq' : ''}`}
+      style={{ '--node-border': sc.border, '--node-bg': sc.bg, '--node-shadow': sc.shadow }}
+    >
+      <span className="bt-node-label">{label}</span>
+      <span className="bt-node-type">{typeLabel}</span>
     </div>
   )
 }
 
 const nodeTypes = { btNode: BTNodeComponent }
 
-// ─── Flow wrapper (needs ReactFlowProvider context) ─────────────────────────
+// ─── Flow wrapper ────────────────────────────────────────────────────────────
 function FlowCanvas({ nodes, edges }) {
-  const { fitView } = useReactFlow()
-  useEffect(() => { fitView({ padding: 0.15, duration: 300 }) }, [nodes, fitView])
-
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      fitView
+      defaultViewport={{ x: 50, y: 20, zoom: 0.55 }}
       proOptions={{ hideAttribution: true }}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
-      minZoom={0.3}
-      maxZoom={2}
+      minZoom={0.2}
+      maxZoom={3}
       style={{ background: 'transparent' }}
     >
       <Background color="rgba(255,255,255,0.03)" gap={20} />
-      <Controls showInteractive={false} style={{ background: '#1a1510', borderColor: 'rgba(255,255,255,0.1)' }} />
+      <Controls showInteractive={false} />
     </ReactFlow>
   )
 }
@@ -158,18 +153,9 @@ export default function BehaviorTree({ node }) {
   if (!node) return null
 
   return (
-    <div style={{ fontFamily: 'inherit', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <style>{`
-        @keyframes btPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.55; }
-        }
-        .react-flow__node { background: transparent !important; border: none !important; padding: 0 !important; }
-        .react-flow__controls button { background: #1a1510; color: #D4A574; border-color: rgba(255,255,255,0.1); }
-        .react-flow__controls button:hover { background: #2a2015; }
-      `}</style>
+    <div className="bt-wrapper">
       <SummaryCard stats={stats} />
-      <div style={{ flex: 1, minHeight: 200 }}>
+      <div className="bt-canvas">
         <ReactFlowProvider>
           <FlowCanvas nodes={nodes} edges={edges} />
         </ReactFlowProvider>

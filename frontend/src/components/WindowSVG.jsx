@@ -1,16 +1,15 @@
 // 窗户 SVG 可视化组件 — 2.5D 游戏引擎风格
-import { useId } from 'react'
+import { memo } from 'react'
 
 const STATE_LABELS = {
   closed: '已关闭', opening: '开启中', open_partial: '半开',
   open_full: '全开', closing: '关闭中', locked: '🔒 已锁定',
 }
 
-export default function WindowSVG({
+function WindowSVG({
   openPct = 0, screenPct = 0, state = 'closed', motion = 'stopped',
   actuatorState = 'idle', rain = false, wind = 0, alarm = false,
 }) {
-  const uid = useId().replace(/:/g, '')
   const W = 200, H = 280
   const pct = Math.max(0, Math.min(100, openPct)) / 100
   const scrPct = Math.max(0, Math.min(100, screenPct)) / 100
@@ -31,41 +30,32 @@ export default function WindowSVG({
   const motorActive = actuatorState === 'extending' || actuatorState === 'retracting'
   const statusColor = alarm ? '#E07070' : motion !== 'stopped' ? '#7EC8A0' : '#D4A574'
 
-  const kf = `
-    @keyframes rain-${uid}{0%{transform:translateY(-10px);opacity:1}100%{transform:translateY(${GH}px);opacity:0}}
-    @keyframes wind-${uid}{0%{transform:translateX(-20px);opacity:0}50%{opacity:1}100%{transform:translateX(${GW}px);opacity:0}}
-    @keyframes alarm-${uid}{0%,100%{stroke-opacity:0.3}50%{stroke-opacity:1}}
-    @keyframes spin-${uid}{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-  `
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <style>{kf}</style>
-      <svg width={200} height={280} viewBox={`0 0 ${W} ${H}`} fill="none"
-        style={{ background: '#100C06', borderRadius: 8 }}>
+    <div className="window-svg-container">
+      <svg width={200} height={280} viewBox={`0 0 ${W} ${H}`} fill="none" className="window-svg">
         <defs>
-          <linearGradient id={`fg-${uid}`} x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id="wsvg-fg" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#5A5A5A" /><stop offset="100%" stopColor="#2A2A2A" />
           </linearGradient>
-          <linearGradient id={`glass-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="wsvg-glass" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(100,180,255,0.15)" />
             <stop offset="100%" stopColor="rgba(100,180,255,0.05)" />
           </linearGradient>
-          <pattern id={`mesh-${uid}`} width="6" height="6" patternUnits="userSpaceOnUse">
+          <pattern id="wsvg-mesh" width="6" height="6" patternUnits="userSpaceOnUse">
             <path d="M0 3h6M3 0v6" stroke="rgba(80,200,80,0.4)" strokeWidth="0.4" />
           </pattern>
-          <clipPath id={`clip-${uid}`}><rect x={GX} y={GY} width={GW} height={GH} /></clipPath>
+          <clipPath id="wsvg-clip"><rect x={GX} y={GY} width={GW} height={GH} /></clipPath>
         </defs>
 
         {/* Window frame */}
         <rect x={FX} y={FY} width={FW} height={FH} rx="4"
-          fill={`url(#fg-${uid})`} stroke={alarm ? '#E07070' : '#4A4A4A'} strokeWidth="2"
-          style={alarm ? { animation: `alarm-${uid} 1s ease-in-out infinite` } : {}} />
+          fill="url(#wsvg-fg)" stroke={alarm ? '#E07070' : '#4A4A4A'} strokeWidth="2"
+          className={alarm ? 'wsvg-alarm-frame' : ''} />
 
         {/* Glass pane */}
-        <rect x={GX} y={GY} width={GW} height={GH} fill={`url(#glass-${uid})`} />
+        <rect x={GX} y={GY} width={GW} height={GH} fill="url(#wsvg-glass)" />
 
-        {/* Window sash (rotating outward via perspective transform) */}
+        {/* Window sash */}
         <g style={{ transformOrigin: `${GX + GW / 2}px ${GY}px`, transform: sashTransform, transition: 'transform 0.5s ease' }}>
           <rect x={GX} y={GY} width={GW} height={GH}
             fill="rgba(100,180,255,0.08)" stroke={statusColor} strokeWidth="1"
@@ -74,11 +64,11 @@ export default function WindowSVG({
           <line x1={GX} y1={GY + GH / 2} x2={GX + GW} y2={GY + GH / 2} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
         </g>
 
-        {/* Screen mesh (rolls down from top) */}
+        {/* Screen mesh */}
         {scrPct > 0.01 && (
-          <g clipPath={`url(#clip-${uid})`}>
+          <g clipPath="url(#wsvg-clip)">
             <rect x={GX} y={GY} width={GW} height={screenH}
-              fill={`url(#mesh-${uid})`} style={{ transition: 'height 0.5s ease' }} />
+              fill="url(#wsvg-mesh)" style={{ transition: 'height 0.5s ease' }} />
             <rect x={GX} y={GY} width={GW} height={screenH}
               fill="rgba(80,200,80,0.12)" style={{ transition: 'height 0.5s ease' }} />
             <rect x={GX} y={GY + screenH - 2} width={GW} height={3}
@@ -95,29 +85,31 @@ export default function WindowSVG({
 
         {/* Motor spinning indicator */}
         {motorActive && (
-          <g style={{ transformOrigin: `${FX + FW - 18}px ${FY + FH - 18}px`, animation: `spin-${uid} 1s linear infinite` }}>
+          <g className="wsvg-spin" style={{ transformOrigin: `${FX + FW - 18}px ${FY + FH - 18}px` }}>
             <circle cx={FX + FW - 18} cy={FY + FH - 18} r="5" fill="none" stroke={statusColor} strokeWidth="1.5" strokeDasharray="8 6" />
           </g>
         )}
 
         {/* Rain droplets */}
         {rain && (
-          <g clipPath={`url(#clip-${uid})`}>
-            {[...Array(8)].map((_, i) => (
+          <g clipPath="url(#wsvg-clip)">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map(i => (
               <line key={i} x1={GX + 10 + i * 16} y1={GY} x2={GX + 8 + i * 16} y2={GY + 8}
                 stroke="rgba(100,180,255,0.7)" strokeWidth="1" strokeLinecap="round"
-                style={{ animation: `rain-${uid} ${0.6 + i * 0.1}s linear infinite`, animationDelay: `${i * 0.15}s` }} />
+                className="wsvg-rain"
+                style={{ animationDelay: `${i * 0.15}s`, animationDuration: `${0.6 + i * 0.1}s` }} />
             ))}
           </g>
         )}
 
         {/* Wind arrows */}
         {wind > 5 && (
-          <g clipPath={`url(#clip-${uid})`}>
-            {[...Array(3)].map((_, i) => (
+          <g clipPath="url(#wsvg-clip)">
+            {[0, 1, 2].map(i => (
               <line key={i} x1={GX} y1={GY + 30 + i * 40} x2={GX + 20} y2={GY + 28 + i * 40}
                 stroke="rgba(255,255,255,0.5)" strokeWidth="1" strokeLinecap="round"
-                style={{ animation: `wind-${uid} ${1.2 - i * 0.2}s linear infinite`, animationDelay: `${i * 0.3}s` }} />
+                className="wsvg-wind"
+                style={{ animationDelay: `${i * 0.3}s`, animationDuration: `${1.2 - i * 0.2}s` }} />
             ))}
           </g>
         )}
@@ -129,11 +121,12 @@ export default function WindowSVG({
       </svg>
 
       {/* Status text */}
-      <div style={{ textAlign: 'center', userSelect: 'none', color: statusColor, fontSize: 12, fontWeight: 600, transition: 'color 0.3s' }}>
+      <div className="window-svg-label" style={{ color: statusColor }}>
         {STATE_LABELS[state] ?? state}
-        {scrPct > 0.01 && <span style={{ color: '#888', fontWeight: 400 }}> · 纱窗 {Math.round(screenPct)}%</span>}
+        {scrPct > 0.01 && <span className="window-svg-screen-pct"> · 纱窗 {Math.round(screenPct)}%</span>}
       </div>
     </div>
   )
 }
 
+export default memo(WindowSVG)
