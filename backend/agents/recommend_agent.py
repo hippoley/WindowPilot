@@ -41,7 +41,7 @@ class RecommendAgent(BaseAgent):
 
     def _has_trigger(self, snapshot: ContextSnapshot) -> bool:
         """检查是否有环境触发条件（CO2/湿度/温度/噪声）"""
-        triggers = {"CO2_HIGH", "HUMIDITY_HIGH", "INDOOR_HOT", "NOISE_HIGH"}
+        triggers = {"CO2_HIGH", "CO2_VERY_HIGH", "HUMIDITY_HIGH", "INDOOR_HOT", "INDOOR_HOT_OUTDOOR_COOL", "NOISE_HIGH"}
         return bool(triggers & set(snapshot.tags))
 
     async def _run_pipeline(self, tm: ThingModel, snapshot: ContextSnapshot):

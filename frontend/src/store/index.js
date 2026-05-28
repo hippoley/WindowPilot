@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // --- Zustand-style store factory (zero dependencies) ---
 
@@ -20,7 +20,6 @@ function create(initializer) {
     return () => listeners.delete(listener);
   };
 
-  // Initialize state by invoking the initializer with set/get helpers
   state = initializer(setState, getState);
 
   return { getState, setState, subscribe };
@@ -34,13 +33,13 @@ const store = create((set) => ({
 
   // World state (from WebSocket tick)
   tick: 0,
-  thingModel: null, // { window, actuator, screen, sensors, security }
-  tree: null,       // behavior tree data
+  thingModel: null,
+  tree: null,
   btBranch: '...',
   decisionLog: [],
 
   // UI state
-  activeTab: 'scenes', // 'scenes' | 'sensors' | 'json' | 'manual'
+  activeTab: 'scenes',
   jsonText: '{}',
 
   // Actions
@@ -68,19 +67,29 @@ const store = create((set) => ({
 }));
 
 // --- React hook: useStore(selector?) ---
-// Uses useSyncExternalStore for safe concurrent-mode integration.
-// Selector should be a stable reference (defined outside component or wrapped in useCallback).
+// Simple useState + subscribe pattern. Bulletproof.
 
 function useStore(selector) {
-  const getSnapshot = selector
-    ? () => selector(store.getState())
-    : () => store.getState();
+  const select = selector || ((s) => s);
+  const [slice, setSlice] = useState(() => select(store.getState()));
+  const selectorRef = useRef(select);
+  selectorRef.current = select;
 
-  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
+  useEffect(() => {
+    // Update immediately in case state changed between render and effect
+    const current = selectorRef.current(store.getState());
+    setSlice(current);
+
+    return store.subscribe((newState) => {
+      const next = selectorRef.current(newState);
+      setSlice(next);
+    });
+  }, []);
+
+  return slice;
 }
 
-// --- Shallow equality helper ---
-// Use with useStoreShallow for object selectors that return new references each call.
+// --- useStoreShallow: same but with shallow comparison ---
 
 function shallow(a, b) {
   if (Object.is(a, b)) return true;
@@ -93,19 +102,21 @@ function shallow(a, b) {
   return true;
 }
 
-// useStoreShallow: like useStore but uses shallow comparison to avoid re-renders
-// when the selected object has the same values but a new reference.
 function useStoreShallow(selector) {
-  const prevRef = useRef(undefined);
+  const [slice, setSlice] = useState(() => selector(store.getState()));
+  const prevRef = useRef(slice);
 
-  const getSnapshot = useCallback(() => {
-    const next = selector(store.getState());
-    if (shallow(prevRef.current, next)) return prevRef.current;
-    prevRef.current = next;
-    return next;
+  useEffect(() => {
+    return store.subscribe((newState) => {
+      const next = selector(newState);
+      if (!shallow(prevRef.current, next)) {
+        prevRef.current = next;
+        setSlice(next);
+      }
+    });
   }, [selector]);
 
-  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
+  return slice;
 }
 
 export { create, store, useStore, useStoreShallow, shallow };

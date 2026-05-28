@@ -22,7 +22,8 @@ from typing import Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 # Ensure parent dir is on sys.path for flat package imports
 _backend_dir = str(Path(__file__).parent.parent)
@@ -232,7 +233,9 @@ async def tick_loop():
             security_agent.safe_tick(tm, snapshot)
 
             # 4. 异步 AI 推荐（不阻塞）
-            if (tm.bt_active_branch == "P5.NeedGenerate"
+            # 注意：SafetyAgent.tick() 会用 tree.tip().name 覆盖 bt_active_branch，
+            # 所以这里同时匹配内部标记 "P5.NeedGenerate" 和 BT 节点名 "生成推荐"
+            if (tm.bt_active_branch in ("P5.NeedGenerate", "生成推荐")
                     and tm.ai_recommendation is None
                     and not _ai_running):
                 _ai_task = asyncio.create_task(_run_ai_pipeline(snapshot))
@@ -318,6 +321,53 @@ async def ws_endpoint(websocket: WebSocket):
         connected.discard(websocket)
 
 
+def _auto_respond_to_sensor():
+    """传感器变化后即时响应 — 直接执行动作，不等推荐确认"""
+    # CO₂ 超标 → 自动开窗通风
+    if tm.co2_ppm > 800 and tm.window_open_pct < 5 and not tm.rain_detected:
+        target = 40 if tm.co2_ppm > 1200 else 25
+        tm.window_target_pct = target
+        tm.window_open_pct = target
+        tm.window_state = "open_partial"
+        tm.window_motion = "stopped"
+        tm.actuator_state = "holding"
+        tm.actuator_stroke_mm = (target / 100.0) * cap.max_stroke_mm
+        trace.record(tm, "AutoResp.CO2", f"co2={tm.co2_ppm:.0f}→open {target}%", "success")
+
+    # 高温 + 室外凉爽 → 开窗散热
+    if tm.temp_indoor_c > 30 and tm.temp_outdoor_c < tm.temp_indoor_c - 3 and tm.window_open_pct < 5 and not tm.rain_detected:
+        target = 35
+        tm.window_target_pct = target
+        tm.window_open_pct = target
+        tm.window_state = "open_partial"
+        tm.window_motion = "stopped"
+        tm.actuator_state = "holding"
+        tm.actuator_stroke_mm = (target / 100.0) * cap.max_stroke_mm
+        trace.record(tm, "AutoResp.Heat", f"indoor={tm.temp_indoor_c:.1f}→open {target}%", "success")
+
+    # VOC 超标 → 开窗排气
+    if tm.voc_mg > 0.8 and tm.window_open_pct < 5 and not tm.rain_detected:
+        target = 50
+        tm.window_target_pct = target
+        tm.window_open_pct = target
+        tm.window_state = "open_partial"
+        tm.window_motion = "stopped"
+        tm.actuator_state = "holding"
+        tm.actuator_stroke_mm = (target / 100.0) * cap.max_stroke_mm
+        trace.record(tm, "AutoResp.VOC", f"voc={tm.voc_mg:.2f}→open {target}%", "success")
+
+    # 强风/暴雨 → 关窗（如果窗户开着）
+    if (tm.rain_detected or tm.wind_speed_ms >= 10) and tm.window_open_pct > 0:
+        tm.window_target_pct = 0
+        tm.window_open_pct = 0
+        tm.window_state = "closed"
+        tm.window_motion = "stopped"
+        tm.actuator_state = "idle"
+        tm.actuator_stroke_mm = 0.0
+        reason = "rain" if tm.rain_detected else f"wind={tm.wind_speed_ms:.0f}m/s"
+        trace.record(tm, "AutoResp.Safety", f"{reason}→close", "success")
+
+
 async def handle_command(msg: dict):
     cmd   = msg.get("cmd")
     value = msg.get("value")
@@ -337,9 +387,36 @@ async def handle_command(msg: dict):
             tm.ai_recommendation = None
             tm.ai_recommendations = None
             tm.recommendation_card = None
+            # ─── 即时响应：传感器变化直接触发动作（不等推荐确认）───
+            _auto_respond_to_sensor()
 
     elif cmd == "user_open_to":
-        tm.user_command = {"source": "app", "action": "open_to", "target_pct": float(value)}
+        # 直接设置窗户位置（立即生效，不等物理仿真）
+        target = float(value)
+        tm.user_command = {"source": "app", "action": "open_to", "target_pct": target}
+        tm.window_target_pct = target
+        tm.window_open_pct = target  # 立即到位
+        tm.human_detected = True
+        # 更新状态
+        if target <= 0:
+            tm.window_state = "closed"
+            tm.window_motion = "stopped"
+            tm.actuator_state = "idle"
+            tm.actuator_stroke_mm = 0.0
+        elif target >= 100:
+            tm.window_state = "open_full"
+            tm.window_motion = "stopped"
+            tm.actuator_state = "holding"
+            tm.actuator_stroke_mm = cap.max_stroke_mm
+        else:
+            tm.window_state = "open_partial"
+            tm.window_motion = "stopped"
+            tm.actuator_state = "holding"
+            tm.actuator_stroke_mm = (target / 100.0) * cap.max_stroke_mm
+        # 确保纱窗不阻塞
+        if target > 0 and tm.screen_position_pct < 95:
+            tm.screen_position_pct = 100.0
+            tm.screen_motion = "stopped"
 
     elif cmd == "user_screen_to":
         tm.user_command = {"source": "app", "action": "screen_to", "target_pct": float(value)}
@@ -486,6 +563,76 @@ def health():
     }
 
 
+# ═══ REST API — 命令接口 ═══
+
+@app.post("/api/command")
+async def api_command(body: dict):
+    """通用命令接口 — 前端通过 HTTP POST 发送命令"""
+    await handle_command(body)
+    return {"ok": True, "cmd": body.get("cmd"), "tick": tick_count}
+
+
+@app.post("/api/scene/{scene_id}")
+async def api_scene(scene_id: str):
+    """场景注入 — 重置后加载预设场景"""
+    await _load_scenario(scene_id)
+    return {"ok": True, "scene": scene_id, "tick": tick_count}
+
+
+@app.post("/api/sensor")
+async def api_set_sensor(body: dict):
+    """设置传感器值"""
+    await handle_command({"cmd": "set_sensor", "key": body.get("key"), "value": body.get("value")})
+    return {"ok": True, "key": body.get("key"), "value": body.get("value"), "tick": tick_count}
+
+
+@app.post("/api/window/{action}")
+async def api_window(action: str, body: dict = None):
+    """窗户控制快捷 API"""
+    if body is None:
+        body = {}
+    if action == "open":
+        target = body.get("target_pct", 50)
+        await handle_command({"cmd": "user_open_to", "value": target})
+        return {"ok": True, "action": "open", "target_pct": target}
+    elif action == "close":
+        await handle_command({"cmd": "user_open_to", "value": 0})
+        return {"ok": True, "action": "close"}
+    elif action == "stop":
+        await handle_command({"cmd": "user_stop"})
+        return {"ok": True, "action": "stop"}
+    else:
+        return {"ok": False, "error": f"unknown action: {action}"}
+
+
+@app.post("/api/security/{action}")
+async def api_security(action: str):
+    """安防控制"""
+    if action == "arm":
+        security_agent.arm(tm)
+    elif action == "disarm":
+        security_agent.disarm(tm)
+    return {"ok": True, "action": action, "tick": tick_count}
+
+
+@app.post("/api/reset")
+async def api_reset():
+    """重置系统"""
+    _reset()
+    return {"ok": True, "tick": tick_count}
+
+
+@app.get("/api/state")
+def api_state():
+    """获取完整系统状态（替代 WebSocket tick）"""
+    return {
+        "tick": tick_count,
+        "thing_model": tm.to_dict(),
+        "bt_branch": tm.bt_active_branch,
+        "decision_log": trace.recent(5),
+    }
+
+
 @app.get("/agents")
 def agents_endpoint():
     """返回所有 Agent 状态"""
@@ -498,7 +645,28 @@ def get_schedules():
     return scheduler_agent.list_schedules()
 
 
+# ═══ 前端静态文件服务 ═══
+_frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
 @app.get("/", response_class=HTMLResponse)
 def index():
+    index_html = _frontend_dist / "index.html"
+    if index_html.exists():
+        return index_html.read_text(encoding="utf-8")
+    # fallback: 旧的 server/index.html
     html_path = Path(__file__).parent / "index.html"
-    return html_path.read_text(encoding="utf-8")
+    if html_path.exists():
+        return html_path.read_text(encoding="utf-8")
+    return "<h1>WindowPilot</h1><p>Frontend not built. Run: cd frontend && npm run build</p>"
+
+# 挂载静态资源（assets/、favicon 等）— 必须放在所有路由之后
+if _frontend_dist.exists():
+    app.mount("/assets", StaticFiles(directory=str(_frontend_dist / "assets")), name="frontend-assets")
+    # 其他静态文件（favicon.svg 等）
+    @app.get("/{filename:path}")
+    def serve_static(filename: str):
+        file_path = _frontend_dist / filename
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        # SPA fallback: 所有未匹配路由返回 index.html
+        return HTMLResponse((_frontend_dist / "index.html").read_text(encoding="utf-8"))

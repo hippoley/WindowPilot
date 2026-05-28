@@ -48,6 +48,19 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
+# ── 第三方参考仓库（不跟踪）──
+Jaiqu/
+semble_rs/
+third_party/
+
+# ── Rust 独立仓库（不跟踪）──
+rule-matcher/
+rust-agentic-search/
+
+# ── 杂项文件（不跟踪）──
+物模型完全参考手册.md
+frontend/check_env.sh
+
 # ── 日志 / 临时文件 ──
 *.log
 *.tmp
