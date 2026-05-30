@@ -11,11 +11,11 @@ from domain.capability import DeviceCapability
 from domain.decision_trace import DecisionTraceLog
 
 _rules_path = Path(__file__).parent.parent / "config" / "safety_rules.yaml"
-with open(_rules_path) as f:
+with open(_rules_path, encoding="utf-8") as f:
     RULES = yaml.safe_load(f)
 
 _room_path = Path(__file__).parent.parent / "config" / "room_strategies.yaml"
-with open(_room_path) as f:
+with open(_room_path, encoding="utf-8") as f:
     ROOMS = yaml.safe_load(f)
 
 

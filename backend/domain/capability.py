@@ -31,7 +31,7 @@ class DeviceCapability:
     def from_yaml(cls, path: str = None) -> 'DeviceCapability':
         if path is None:
             path = str(Path(__file__).parent.parent / "config" / "device_profile.yaml")
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         dev = cfg.get("device", {})
         link = cfg.get("linkage", {})

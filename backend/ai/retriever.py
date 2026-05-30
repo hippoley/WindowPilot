@@ -17,7 +17,7 @@ from domain.capability import DeviceCapability
 # 从 YAML 配置加载场景模板库（运营可维护，无需改代码）
 _TEMPLATES_PATH = Path(__file__).parent.parent / "config" / "scene_templates.yaml"
 try:
-    with open(_TEMPLATES_PATH) as f:
+    with open(_TEMPLATES_PATH, encoding="utf-8") as f:
         _TEMPLATES_CFG = yaml.safe_load(f)
     SCENE_TEMPLATES = _TEMPLATES_CFG.get("templates", [])
 except FileNotFoundError:

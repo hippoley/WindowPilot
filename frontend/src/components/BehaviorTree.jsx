@@ -1,115 +1,100 @@
 import { useMemo } from 'react'
-import ReactFlow, { Background, Controls, ReactFlowProvider } from 'reactflow'
+import ReactFlow, { Background, Controls, Panel, ReactFlowProvider } from 'reactflow'
 import 'reactflow/dist/style.css'
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-const TYPE_LABELS = { Selector: 'SEL', Sequence: 'SEQ', Behaviour: 'ACT' }
-const NODE_SIZES = { Selector: { w: 200, h: 44 }, Sequence: { w: 180, h: 40 }, Behaviour: { w: 160, h: 36 } }
-const H_GAP = 24, V_GAP = 80
-
-const STATUS_COLORS = {
-  success: { border: '#34d399', bg: 'rgba(52,211,153,0.12)', shadow: '0 0 8px #34d399' },
-  failure: { border: '#6b7280', bg: 'rgba(107,114,128,0.08)', shadow: 'none' },
-  running: { border: '#fbbf24', bg: 'rgba(251,191,36,0.12)', shadow: '0 0 10px #fbbf24' },
-  invalid: { border: '#4b5563', bg: 'transparent', shadow: 'none' },
+const TYPE_LABELS = {
+  Selector: 'SEL',
+  Sequence: 'SEQ',
+  Behaviour: 'ACT',
 }
 
-// ─── Stats ──────────────────────────────────────────────────────────────────
-function collectStats(node, acc = { running: 0, success: 0, failure: 0 }) {
+const NODE_SIZES = {
+  Selector: { w: 210, h: 48 },
+  Sequence: { w: 190, h: 44 },
+  Behaviour: { w: 170, h: 40 },
+}
+
+const STATUS_META = {
+  success: { label: '成功', className: 'success', color: '#22c55e' },
+  failure: { label: '失败', className: 'failure', color: '#64748b' },
+  running: { label: '运行', className: 'running', color: '#f59e0b' },
+  invalid: { label: '未运行', className: 'invalid', color: '#334155' },
+}
+
+const H_GAP = 30
+const V_GAP = 88
+
+function collectStats(node, acc = { running: 0, success: 0, failure: 0, invalid: 0, total: 0 }) {
   if (!node) return acc
-  if (node.status === 'running') acc.running++
-  else if (node.status === 'success') acc.success++
-  else if (node.status === 'failure') acc.failure++
-  if (node.children) node.children.forEach(c => collectStats(c, acc))
+  acc.total += 1
+  if (acc[node.status] !== undefined) acc[node.status] += 1
+  else acc.invalid += 1
+  node.children?.forEach(child => collectStats(child, acc))
   return acc
 }
 
-// ─── Summary Card ───────────────────────────────────────────────────────────
-function SummaryCard({ stats }) {
-  return (
-    <div className="bt-summary">
-      <div className="bt-stat">
-        <span className="bt-stat-dot warning" />
-        {stats.running} 运行中
-      </div>
-      <div className="bt-stat-sep" />
-      <div className="bt-stat">
-        <span className="bt-stat-dot success" />
-        {stats.success} 成功
-      </div>
-      <div className="bt-stat-sep" />
-      <div className="bt-stat">
-        <span className="bt-stat-dot danger" />
-        {stats.failure} 失败
-      </div>
-    </div>
-  )
+function findActiveLeaves(node, leaves = []) {
+  if (!node) return leaves
+  if ((node.status === 'success' || node.status === 'running') && !node.children?.length) {
+    leaves.push(node)
+  }
+  node.children?.forEach(child => findActiveLeaves(child, leaves))
+  return leaves
 }
 
-// ─── Tree layout ────────────────────────────────────────────────────────────
 function measureSubtree(node) {
   const size = NODE_SIZES[node.type] || NODE_SIZES.Behaviour
-  if (!node.children || node.children.length === 0) return size.w
-  const childrenWidth = node.children.reduce((sum, c) => sum + measureSubtree(c), 0)
+  if (!node.children?.length) return size.w
+  const childrenWidth = node.children.reduce((sum, child) => sum + measureSubtree(child), 0)
   return Math.max(size.w, childrenWidth + (node.children.length - 1) * H_GAP)
 }
 
-function getActivePath(node, path = new Set()) {
-  if (!node) return path
-  if (node.status === 'success' || node.status === 'running') {
-    path.add(node.id)
-    if (node.children) node.children.forEach(c => getActivePath(c, path))
-  }
-  return path
-}
-
-function buildFlowData(node, x, y, parentId, nodes, edges, activePath) {
+function buildFlowData(node, x, y, parentId, nodes, edges) {
   const size = NODE_SIZES[node.type] || NODE_SIZES.Behaviour
-  const isActive = activePath.has(node.id)
+  const status = node.status || 'invalid'
 
   nodes.push({
     id: node.id,
     position: { x: x - size.w / 2, y },
-    data: { label: node.name, type: node.type, status: node.status },
+    data: { label: node.name, type: node.type, status },
     type: 'btNode',
     style: { width: size.w, height: size.h },
   })
 
   if (parentId) {
+    const isLive = status === 'success' || status === 'running'
     edges.push({
       id: `${parentId}->${node.id}`,
       source: parentId,
       target: node.id,
       type: 'smoothstep',
-      animated: node.status === 'running',
-      style: { stroke: isActive ? '#D4A574' : 'rgba(255,255,255,0.15)', strokeWidth: isActive ? 2.5 : 1.2 },
+      animated: status === 'running',
+      style: {
+        stroke: isLive ? STATUS_META[status].color : 'rgba(148, 163, 184, .22)',
+        strokeWidth: isLive ? 2.2 : 1.2,
+      },
     })
   }
 
-  if (node.children && node.children.length > 0) {
-    const totalWidth = node.children.reduce((s, c) => s + measureSubtree(c), 0) + (node.children.length - 1) * H_GAP
-    let offsetX = x - totalWidth / 2
-    for (const child of node.children) {
-      const cw = measureSubtree(child)
-      buildFlowData(child, offsetX + cw / 2, y + V_GAP, node.id, nodes, edges, activePath)
-      offsetX += cw + H_GAP
-    }
-  }
+  if (!node.children?.length) return
+
+  const totalWidth = node.children.reduce((sum, child) => sum + measureSubtree(child), 0) + (node.children.length - 1) * H_GAP
+  let offsetX = x - totalWidth / 2
+  node.children.forEach((child) => {
+    const childWidth = measureSubtree(child)
+    buildFlowData(child, offsetX + childWidth / 2, y + V_GAP, node.id, nodes, edges)
+    offsetX += childWidth + H_GAP
+  })
 }
 
-// ─── Custom Node (uses CSS custom properties for dynamic colors) ─────────────
 function BTNodeComponent({ data }) {
-  const { label, type, status } = data
-  const sc = STATUS_COLORS[status] || STATUS_COLORS.invalid
-  const typeLabel = TYPE_LABELS[type] || 'ACT'
-  const isSequence = type === 'Sequence'
+  const meta = STATUS_META[data.status] || STATUS_META.invalid
+  const typeLabel = TYPE_LABELS[data.type] || 'ACT'
 
   return (
-    <div
-      className={`bt-node ${status === 'running' ? 'bt-node--running' : ''} ${isSequence ? 'bt-node--seq' : ''}`}
-      style={{ '--node-border': sc.border, '--node-bg': sc.bg, '--node-shadow': sc.shadow }}
-    >
-      <span className="bt-node-label">{label}</span>
+    <div className={`bt-node bt-node--${meta.className} bt-node--${data.type?.toLowerCase() || 'behaviour'}`}>
+      <span className="bt-node-status" />
+      <span className="bt-node-label" title={data.label}>{data.label}</span>
       <span className="bt-node-type">{typeLabel}</span>
     </div>
   )
@@ -117,44 +102,70 @@ function BTNodeComponent({ data }) {
 
 const nodeTypes = { btNode: BTNodeComponent }
 
-// ─── Flow wrapper ────────────────────────────────────────────────────────────
 function FlowCanvas({ nodes, edges }) {
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      defaultViewport={{ x: 50, y: 20, zoom: 0.55 }}
+      defaultViewport={{ x: 170, y: 72, zoom: 0.76 }}
       proOptions={{ hideAttribution: true }}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
-      minZoom={0.2}
-      maxZoom={3}
+      minZoom={0.28}
+      maxZoom={2}
       style={{ background: 'transparent' }}
     >
-      <Background color="rgba(255,255,255,0.03)" gap={20} />
+      <Background color="rgba(148, 163, 184, .14)" gap={24} />
       <Controls showInteractive={false} />
+      <Panel position="top-left" className="bt-legend">
+        {Object.entries(STATUS_META).slice(0, 4).map(([key, meta]) => (
+          <span key={key}><i className={`legend-dot legend-dot--${meta.className}`} />{meta.label}</span>
+        ))}
+      </Panel>
     </ReactFlow>
   )
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
-export default function BehaviorTree({ node }) {
+function SummaryCard({ stats, activeBranch, activeLeaves }) {
+  return (
+    <div className="bt-summary">
+      <div className="bt-summary-main">
+        <span>当前分支</span>
+        <strong>{activeBranch || activeLeaves[0]?.name || '等待命中'}</strong>
+      </div>
+      <div className="bt-stat-row">
+        <span><i className="legend-dot legend-dot--running" />{stats.running} 运行</span>
+        <span><i className="legend-dot legend-dot--success" />{stats.success} 成功</span>
+        <span><i className="legend-dot legend-dot--failure" />{stats.failure} 失败</span>
+        <span>{stats.total} 节点</span>
+      </div>
+      {activeLeaves.length > 0 && (
+        <div className="bt-active-strip">
+          {activeLeaves.map(leaf => <span key={leaf.id}>{leaf.name}</span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function BehaviorTree({ node, activeBranch }) {
   const stats = useMemo(() => collectStats(node), [node])
+  const activeLeaves = useMemo(() => findActiveLeaves(node).slice(0, 4), [node])
   const { nodes, edges } = useMemo(() => {
     if (!node) return { nodes: [], edges: [] }
-    const n = [], e = []
-    const activePath = getActivePath(node)
-    buildFlowData(node, 0, 0, null, n, e, activePath)
-    return { nodes: n, edges: e }
+    const nextNodes = []
+    const nextEdges = []
+    buildFlowData(node, 0, 0, null, nextNodes, nextEdges)
+    return { nodes: nextNodes, edges: nextEdges }
   }, [node])
 
   if (!node) return null
 
   return (
     <div className="bt-wrapper">
-      <SummaryCard stats={stats} />
+      <SummaryCard stats={stats} activeBranch={activeBranch} activeLeaves={activeLeaves} />
       <div className="bt-canvas">
         <ReactFlowProvider>
           <FlowCanvas nodes={nodes} edges={edges} />
